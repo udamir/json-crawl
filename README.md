@@ -42,15 +42,21 @@ const hooks = [
   // Array of hooks for custom operations during cloning
 ];
 
-const initialState = {
-  // Initial state object for hooks (optional)
+const params = {
+  state: {
+    // Initial state object for hooks (optional)
+  },
+
+  rules: {
+    // Crawl rules map
+  }
 };
 
 // deep Clone
-const cloned = syncClone(data, hooks, initialState)
+const cloned = syncClone(data, hooks, params)
 
 // crawl
-syncCrawl(data, hooks, initialState)
+syncCrawl(data, hooks, params)
 
 ```
 
