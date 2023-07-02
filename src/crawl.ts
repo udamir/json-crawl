@@ -67,7 +67,7 @@ export const crawl = async <T, R = any>(data: any, hooks: CrawlHook<T, R> | Craw
   }
 }
 
-export const syncCrawl = <T, R>(data: any, hooks: SyncCrawlHook<T, R> | SyncCrawlHook<T, R>[], params: CrawlParams<T, R> = {}): void => {
+export const syncCrawl = <T, R = any>(data: any, hooks: SyncCrawlHook<T, R> | SyncCrawlHook<T, R>[], params: CrawlParams<T, R> = {}): void => {
   hooks = isArray(hooks) ? hooks : [hooks]
 
   const nodes: CrawlNode<T, R>[] = [{ data, state: params.state!, path: [], keys: [], keyIndex: -1, rules: params.rules! }]

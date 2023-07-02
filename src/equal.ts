@@ -1,0 +1,46 @@
+import { SyncCrawlHook } from "./types"
+import { syncCrawl } from "./crawl"
+import { isArray } from "./utils"
+
+interface EqualState {
+  value: any
+}
+
+export const equal = (val1: any, val2: any): boolean => {
+  if (val1 === val2) { return true }
+
+  let result = true 
+
+  const equalHook: SyncCrawlHook<EqualState> = (value, { key, state }) => {
+    if (!result) { return null }
+
+    const _value = key === undefined ? state.value : state.value[key]
+    const _result = { value, state: { value: _value } }
+
+    if (value === _value) {
+      return _result
+    }
+
+    result = false
+    if (typeof value !== typeof _value) { return null }
+
+    if (isArray(value) && value.length !== _value.length) {
+      return null
+    } else if (typeof value === "object" && value !== null) {
+      const keys1 = Object.keys(value)
+      const keys2 = Object.keys(_value)
+      if (keys1.length !== keys2.length || !keys1.every((key) => keys2.includes(key))) {
+        return null
+      }
+    } else if (value !== _value) { 
+      return null 
+    }
+    
+    result = true
+    return _result
+  }
+
+  syncCrawl<EqualState>(val1, equalHook, { state: { value: val2 } })
+
+  return result
+}

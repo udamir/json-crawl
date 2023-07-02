@@ -23,7 +23,7 @@ export interface CrawlHookResponse<T> {
 export type CloneState<T> = {
   root: { "#": any } 
   node: any
-} & (T | {})
+} & (T extends object ? T : never)
 
 export type CloneHook<T = any, R = any> = CrawlHook<CloneState<T>, R>
 export type CrawlHook<T = any, R = any> = (value: unknown, ctx: CrawlContext<T, R>) => Promise<CrawlHookResponse<T> | null> | CrawlHookResponse<T> | null
@@ -36,4 +36,4 @@ export type CrawlRulesKey = `/${string | number}`
 
 export type CrawlRules<R, T = any> = {
   [key: CrawlRulesKey | '/*']: CrawlRules<R, T> | CrawlRulesFunc<R, T>
-} & (R | {})
+} & (R extends object ? R : never)

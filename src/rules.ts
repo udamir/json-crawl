@@ -1,7 +1,7 @@
 import { CrawlRules, CrawlRulesFunc, CrawlRulesKey, JsonPath } from "./types"
 
 export const getNodeRules = <R, T>(
-  rules: CrawlRules<R, T> = {},
+  rules = {} as CrawlRules<R, T>,
   key: string | number,
   path: JsonPath,
   state = {} as T
