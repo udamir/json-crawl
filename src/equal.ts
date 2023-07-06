@@ -12,8 +12,6 @@ export const equal = (val1: any, val2: any): boolean => {
   let result = true 
 
   const equalHook: SyncCrawlHook<EqualState> = (value, { key, state }) => {
-    if (!result) { return null }
-
     const _value = key === undefined ? state.value : state.value[key]
     const _result = { value, state: { value: _value } }
 
@@ -25,15 +23,15 @@ export const equal = (val1: any, val2: any): boolean => {
     if (typeof value !== typeof _value) { return null }
 
     if (isArray(value) && value.length !== _value.length) {
-      return null
+      return { terminate: true } 
     } else if (typeof value === "object" && value !== null) {
       const keys1 = Object.keys(value)
       const keys2 = Object.keys(_value)
       if (keys1.length !== keys2.length || !keys1.every((key) => keys2.includes(key))) {
-        return null
+        return { terminate: true } 
       }
     } else if (value !== _value) { 
-      return null 
+      return { terminate: true } 
     }
     
     result = true

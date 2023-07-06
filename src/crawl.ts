@@ -52,6 +52,7 @@ export const crawl = async <T, R = any>(data: any, hooks: CrawlHook<T, R> | Craw
     for (const hook of hooks) {
       if (!hook || !result) { continue }
       result = await hook(result.value, { path, key, state: result.state!, rules })
+      if (result?.terminate) { return }
       result?.exitHook && exitHooks.push(result.exitHook)
     }
     
@@ -97,6 +98,7 @@ export const syncCrawl = <T, R = any>(data: any, hooks: SyncCrawlHook<T, R> | Sy
     for (const hook of hooks) {
       if (!hook || !result) { continue }
       result = hook(result.value, { path, key, state: result.state || node.state, rules })
+      if (result?.terminate) { return }
       result?.exitHook && exitHook.push(result.exitHook)
     }
     

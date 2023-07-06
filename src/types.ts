@@ -18,6 +18,7 @@ export interface CrawlHookResponse<T> {
   value?: unknown,                        // updated value of current node for crawl
   state?: T,                              // state for next crawl step
   exitHook?: ExitHook                     // on exit hook for current node
+  terminate?: boolean                     // crawl should be terminated
 }
 
 export type CloneState<T> = {

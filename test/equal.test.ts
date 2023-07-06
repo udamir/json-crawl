@@ -1,4 +1,3 @@
-
 import { equal } from "../src"
 
 describe('equal test', () => {
