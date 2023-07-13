@@ -13,6 +13,9 @@ export const getNodeRules = <R, T>(
     node = node[rulesKey]
   } else if ("/*" in node) {
     node = node["/*"]
+  } else if ("/**" in node) {
+    node = node["/**"]
+    return { ...typeof node === "function" ? node(path, state) : node, "/**": node }
   } else {
     return
   }
