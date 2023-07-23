@@ -4,7 +4,7 @@ interface TestState {
   counter: number
 }
 
-type TestRule = { $: (value: any, state: TestState) => any }
+type TestRule = { $?: (value: any, state: TestState) => any, $$?: number }
 type TestRules = CrawlRules<TestRule, TestState>
 
 describe('rules test', () => {
@@ -79,6 +79,54 @@ describe('rules test', () => {
     expect(data).toEqual({
       name: "JOHN",
       age: 30,
+      address: {
+        street: "123 MAIN ST",
+        city: "NEW YORK"
+      },
+    })
+  })
+
+  it('should execute function for each node base on common rule', () => {
+    const testRules1: TestRules = {
+      "/name": { $: () => true },
+      "/age": () => ({ $: () => false })
+    }
+    
+    const testRules2: TestRules = {
+      "/age": {
+        $$: 2
+      },
+      "/address": {
+        "/*": { $: (v) => typeof v === "string" }
+      }
+    }
+
+    const source = {
+      name: "John",
+      age: 30,
+      address: {
+        street: "123 Main St",
+        city: "New York"
+      }
+    }
+
+    const hook: SyncCloneHook = (value, ctx) => {
+      if (!ctx.rules) { return { value } }
+      if ("$$" in ctx.rules) {
+        const m = ctx.rules["$$"]
+        return { value: <number>value * m }
+      }
+      if ("$" in ctx.rules && ctx.rules.$(value)) {
+        return { value: (value as string).toUpperCase() }
+      }
+      return { value }
+    }
+
+    const data = syncClone(source, hook, { rules: [testRules1, testRules2] })
+
+    expect(data).toEqual({
+      name: "JOHN",
+      age: 60,
       address: {
         street: "123 MAIN ST",
         city: "NEW YORK"

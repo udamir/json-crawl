@@ -1,6 +1,6 @@
-import { CrawlHook, CrawlHookResponse, ExitHook, SyncCrawlHook, JsonPath, CrawlRules, CrawlParams } from "./types"
+import type { CrawlHook, CrawlHookResponse, ExitHook, SyncCrawlHook, JsonPath, CrawlRules, CrawlParams } from "./types"
+import { getNodeRules, mergeRules } from "./rules"
 import { isArray, isObject } from "./utils"
-import { getNodeRules } from "./rules"
 
 interface CrawlNode<T, R> {
   // node path
@@ -14,7 +14,7 @@ interface CrawlNode<T, R> {
   keyIndex: number
   
   // node rules
-  rules?: CrawlRules<R, T>
+  rules?: CrawlRules<R, T> 
 
   // node state
   state: T
@@ -24,8 +24,9 @@ interface CrawlNode<T, R> {
 
 export const crawl = async <T, R = any>(data: any, hooks: CrawlHook<T, R> | CrawlHook<T, R>[], params: CrawlParams<T, R> = {}): Promise<void> => {
   hooks = isArray(hooks) ? hooks : [hooks]
+  const _rules = isArray(params.rules) ? mergeRules(params.rules) : params.rules
 
-  const nodes: CrawlNode<T, R>[] = [{ data, state: params.state!, path: [], keys: [], keyIndex: -1, rules: params.rules! }]
+  const nodes: CrawlNode<T, R>[] = [{ data, state: params.state!, path: [], keys: [], keyIndex: -1, rules: _rules! }]
 
   while (nodes.length > 0) {
     const node = nodes[nodes.length-1]
@@ -43,7 +44,7 @@ export const crawl = async <T, R = any>(data: any, hooks: CrawlHook<T, R> | Craw
 
     const [value, path, rules] = nodes.length > 1 
       ? [node.data[key], [...node.path, key], getNodeRules(node.rules, key, [...node.path, key], params.state)]
-      : [node.data, node.path, params.rules] // root node
+      : [node.data, node.path, _rules] // root node
     
     let result: CrawlHookResponse<T> | null = { value, state: node.state }
     const exitHooks: ExitHook[]  = []
@@ -70,8 +71,9 @@ export const crawl = async <T, R = any>(data: any, hooks: CrawlHook<T, R> | Craw
 
 export const syncCrawl = <T, R = any>(data: any, hooks: SyncCrawlHook<T, R> | SyncCrawlHook<T, R>[], params: CrawlParams<T, R> = {}): void => {
   hooks = isArray(hooks) ? hooks : [hooks]
+  const _rules = isArray(params.rules) ? mergeRules(params.rules) : params.rules
 
-  const nodes: CrawlNode<T, R>[] = [{ data, state: params.state!, path: [], keys: [], keyIndex: -1, rules: params.rules! }]
+  const nodes: CrawlNode<T, R>[] = [{ data, state: params.state!, path: [], keys: [], keyIndex: -1, rules: _rules! }]
 
   while (nodes.length > 0) {
     const node = nodes[nodes.length-1]
@@ -89,7 +91,7 @@ export const syncCrawl = <T, R = any>(data: any, hooks: SyncCrawlHook<T, R> | Sy
 
     const [value, path, rules] = nodes.length > 1 
       ? [node.data[key], [...node.path, key], getNodeRules(node.rules, key, [...node.path, key], params.state)]
-      : [node.data, node.path, params.rules] // root node
+      : [node.data, node.path, _rules] // root node
     
     let result: CrawlHookResponse<T> | null = { value, state: node.state }
     const exitHook: ExitHook[]  = []

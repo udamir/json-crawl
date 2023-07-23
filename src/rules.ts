@@ -34,3 +34,32 @@ export const findCrawlRules = <R, T = any>(rules: CrawlRules<R, T>, path: JsonPa
 
   return node
 }
+
+export const mergeRules = <R, T = any>(rules: CrawlRules<R, T>[]): CrawlRules<R, T> => {
+  const _rules: any = {}
+
+  const keys: Set<string> = rules.reduce((set, r) => { 
+    Object.keys(r).forEach((key) => set.add(key))
+    return set
+  }, new Set<string>())
+
+  for (const key of keys.keys()) {
+    const arr: any = rules.filter((v) => key in v)
+    if (arr.length === 1) {
+      _rules[key] = arr[0][key]
+      continue
+    } 
+
+    if (key.charAt(0) === "/") {
+      // merge rules path
+      _rules[key] = (path: JsonPath, state: T) => {
+        const _arr = arr.map((v: any) => typeof v[key] === "function" ? v[key](path, state) : v[key])
+        return mergeRules(_arr)
+      }
+    } else {
+      throw new Error(`Cannot merge rules. Duplicate key: ${key}. Rules should not have same Rule key`)
+    }
+  }
+
+  return _rules
+}

@@ -2,7 +2,7 @@ export type JsonPath = (string | number)[]
 
 export interface CrawlParams<T, R = any> {
   state?: T
-  rules?: CrawlRules<R, T>
+  rules?: CrawlRules<R, T> | CrawlRules<R, T>[]
 }
 
 export interface CrawlContext<T, R = any> {
