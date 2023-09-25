@@ -44,7 +44,7 @@
     "tslint": "^6.1.2",
     "typescript": "^4.6.2",
     "vite": "^4.0.1",
-    "vite-plugin-dts": "^2.0.2"
+    "vite-plugin-dts": "^3.5.4"
   },
   "engines": {
     "node": ">=14.0.0"
