@@ -6,7 +6,7 @@ export const transform = async <T, R = any>(data: any, hooks: CloneHook<T, R> | 
   hooks = isArray(hooks) ? hooks : [hooks]
   const root = { "#": data }
 
-  const transformHook: CloneHook<T, R> = async (value, { path, key, state }) => {
+  const transformHook: CloneHook<T, R> = async ({ value, path, key, state }) => {
     key = path.length ? key : "#"
     if (value === undefined) {
       if (isArray(state.node) && typeof key === "number") {

@@ -1,4 +1,4 @@
-import type { CrawlHook, CrawlHookResponse, ExitHook, SyncCrawlHook, JsonPath, CrawlRules, CrawlParams } from "./types"
+import type { CrawlHook, ExitHook, SyncCrawlHook, JsonPath, CrawlRules, CrawlParams, CrawlContext } from "./types"
 import { getNodeRules, mergeRules } from "./rules"
 import { isArray, isObject } from "./utils"
 
@@ -46,22 +46,27 @@ export const crawl = async <T, R = any>(data: any, hooks: CrawlHook<T, R> | Craw
       ? [node.data[key], [...node.path, key], getNodeRules(node.rules, key, [...node.path, key], params.state)]
       : [node.data, node.path, _rules] // root node
     
-    let result: CrawlHookResponse<T> | null = { value, state: node.state }
+    let context: CrawlContext<T, R> | null = { value, path, key, state: node.state, rules }
     const exitHooks: ExitHook[]  = []
 
     // execute hooks
     for (const hook of hooks) {
-      if (!hook || !result) { continue }
-      result = await hook(result.value, { path, key, state: result.state!, rules })
-      if (result?.terminate) { return }
-      result?.exitHook && exitHooks.push(result.exitHook)
+      if (!hook || typeof hook !== 'function') { continue }
+      const { terminate, done, exitHook, ...rest } = await hook(context) ?? {}
+      if (terminate) { return }
+      context = { ...context, ...rest }
+      exitHook && exitHooks.push(exitHook)
+      if (done) { 
+        context = null
+        break
+      }
     }
     
     // crawl result value
-    if (result && isObject(result.value)) {
-      const keys = isArray(result.value) ? [...result.value.keys()] : Object.keys(result.value)
+    if (context && isObject(context.value)) {
+      const keys = isArray(context.value) ? [...context.value.keys()] : Object.keys(context.value)
       // move to child nodes
-      nodes.push({ hooks: exitHooks, state: result.state!, data: result.value, path, keys, keyIndex: 0, rules })
+      nodes.push({ hooks: exitHooks, state: context.state, data: context.value, path, keys, keyIndex: 0, rules: context.rules })
     } else {
       // execute exitHooks
       while (exitHooks.length) { exitHooks.pop()!() }
@@ -93,25 +98,30 @@ export const syncCrawl = <T, R = any>(data: any, hooks: SyncCrawlHook<T, R> | Sy
       ? [node.data[key], [...node.path, key], getNodeRules(node.rules, key, [...node.path, key], params.state)]
       : [node.data, node.path, _rules] // root node
     
-    let result: CrawlHookResponse<T> | null = { value, state: node.state }
-    const exitHook: ExitHook[]  = []
+    let context: CrawlContext<T, R> | null = { value, path, key, state: node.state, rules }
+    const exitHooks: ExitHook[]  = []
 
     // execute hooks
     for (const hook of hooks) {
-      if (!hook || !result) { continue }
-      result = hook(result.value, { path, key, state: result.state || node.state, rules })
-      if (result?.terminate) { return }
-      result?.exitHook && exitHook.push(result.exitHook)
+      if (!hook || typeof hook !== 'function') { continue }
+      const { terminate, done, exitHook, ...rest } = hook(context) ?? {}
+      if (terminate) { return }
+      exitHook && exitHooks.push(exitHook)
+      context = { ...context, ...rest } 
+      if (done) { 
+        context = null
+        break
+      }
     }
     
     // crawl result value
-    if (result && isObject(result.value)) {
-      const keys = isArray(result.value) ? [...result.value.keys()] : Object.keys(result.value)
+    if (context && isObject(context.value)) {
+      const keys = isArray(context.value) ? [...context.value.keys()] : Object.keys(context.value)
       // move to child nodes
-      nodes.push({ hooks: exitHook, state: result.state!, data: result.value, path, keys, keyIndex: 0, rules })
+      nodes.push({ hooks: exitHooks, state: context.state!, data: context.value, path, keys, keyIndex: 0, rules: context.rules })
     } else {
       // execute exitHooks
-      while (exitHook.length) { exitHook.pop()!() }
+      while (exitHooks.length) { exitHooks.pop()!() }
     }
   }
 }

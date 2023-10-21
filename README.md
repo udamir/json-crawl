@@ -3,7 +3,6 @@
 
 This package provides utility functions for crawling/cloning json objects like a tree
 
-
 ## Purpose
 
 The purpose of this package is to simplify the traversal and manipulation of complex JSON objects in a tree-like structure. It provides functions that allow you to iterate over each node of a JSON object, perform custom operations, and clone objects deeply while maintaining independence between the original and cloned objects.
@@ -34,21 +33,30 @@ const data = {
 };
 
 const hooks = [
-  (value, { path, key, state }) => {
+  ({ value, path, key, state, rules }) => {
     // Custom logic for each node
+
     // Modify value, state, or perform any desired operations
-    return { value, state }
+    return { 
+      value: newValue,               // updated value of current node for next crawl steps
+      state: newState,               // updated state for next crawl step
+      rules: newRules                // updated rules for next crawl step
+      exitHook,                      // on exit hook for current node
+      terminate: true,               // crawl should be terminated
+      done: true                     // crawl of current node should be terminated
+    }
+    // return void - if no operations are required
   },
   // Array of hooks for custom operations during cloning
 ];
 
 const params = {
-  state: {
+  state?: {
     // Initial state object for hooks (optional)
   },
 
-  rules: {
-    // Crawl rules map
+  rules?: {
+    // Crawl rules map (optional)
   }
 };
 

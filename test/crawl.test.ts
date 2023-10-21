@@ -14,7 +14,6 @@ describe('crawl test', () => {
     let counter = 0
     syncCrawl(source, (value) => { 
       counter++
-      return { value }
     })
 
     expect(counter).toEqual(6)

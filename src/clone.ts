@@ -6,7 +6,7 @@ export const clone = async <T, R>(data: any, hooks: CloneHook<T, R> | CloneHook<
   hooks = Array.isArray(hooks) ? hooks : [hooks]
   const root: any = {}
 
-  const cloneHook: CloneHook<T, R> = async (value, { path, key, state }) => {
+  const cloneHook: CloneHook<T, R> = async ({ value, path, key, state }) => {
     key = path.length ? key : "#"
     state.node[key] = isObject(value) ? (Array.isArray(value) ? [] : {}) : value
     return { value, state: { ...state, node: state.node[key] } as CloneState<T> }
@@ -26,7 +26,7 @@ export const syncClone = <T, R>(data: any, hooks: SyncCloneHook<T, R> | SyncClon
   hooks = Array.isArray(hooks) ? hooks : [hooks]
   const root: any = {}
 
-  const cloneHook: SyncCloneHook<T, R> = (value, { path, key, state }) => {
+  const cloneHook: SyncCloneHook<T, R> = ({ value, path, key, state }) => {
     key = path.length ? key : "#"
     state.node[key] = isObject(value) ? (Array.isArray(value) ? [] : {}) : value
     return { value, state: { ...state, node: state.node[key] } as CloneState<T> }

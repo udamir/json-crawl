@@ -11,16 +11,16 @@ export const equal = (val1: any, val2: any): boolean => {
 
   let result = true 
 
-  const equalHook: SyncCrawlHook<EqualState> = (value, { key, state }) => {
+  const equalHook: SyncCrawlHook<EqualState> = ({ value, key, state }) => {
     const _value = key === undefined ? state.value : state.value[key]
-    const _result = { value, state: { value: _value } }
+    const _result = { state: { value: _value } }
 
     if (value === _value) {
       return _result
     }
 
     result = false
-    if (typeof value !== typeof _value) { return null }
+    if (typeof value !== typeof _value) { return { done: true } }
 
     if (isArray(value) && value.length !== _value.length) {
       return { terminate: true } 
