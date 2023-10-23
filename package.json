@@ -41,7 +41,7 @@
     "@types/jest": "^29.5.2",
     "@types/node": "^18.0.0",
     "rimraf": "^5.0.5",
-    "rollup": "^2.79.1",
+    "rollup": "^4.1.4",
     "rollup-plugin-filesize": "^9.1.0",
     "rollup-plugin-progress": "^1.1.2",
     "jest": "^29.5.2",
