@@ -2,7 +2,7 @@ import { CloneHook, CloneState, CrawlParams, CrawlRules, SyncCloneHook } from ".
 import { crawl, syncCrawl } from "./crawl"
 import { isObject } from "./utils"
 
-export const clone = async <T, R>(data: any, hooks: CloneHook<T, R> | CloneHook<T, R>[] = [], params: CrawlParams<T, R> = {}) => {
+export const clone = async <T extends {}, R extends {} = {}>(data: any, hooks: CloneHook<T, R> | CloneHook<T, R>[] = [], params: CrawlParams<T, R> = {}) => {
   hooks = Array.isArray(hooks) ? hooks : [hooks]
   const root: any = {}
 
@@ -22,7 +22,7 @@ export const clone = async <T, R>(data: any, hooks: CloneHook<T, R> | CloneHook<
   return root["#"]
 }
 
-export const syncClone = <T, R>(data: any, hooks: SyncCloneHook<T, R> | SyncCloneHook<T, R>[] = [], params: CrawlParams<T, R> = {}) => {
+export const syncClone = <T extends {}, R extends {} = {}>(data: any, hooks: SyncCloneHook<T, R> | SyncCloneHook<T, R>[] = [], params: CrawlParams<T, R> = {}) => {
   hooks = Array.isArray(hooks) ? hooks : [hooks]
   const root: any = {}
 

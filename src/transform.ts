@@ -2,7 +2,7 @@ import type { CloneHook, CloneState, CrawlParams, CrawlRules } from "./types"
 import { isArray } from "./utils"
 import { crawl } from "./crawl"
 
-export const transform = async <T, R = any>(data: any, hooks: CloneHook<T, R> | CloneHook<T, R>[] = [], params: CrawlParams<T, R> = {}) => {
+export const transform = async <T extends {}, R extends {} = {}>(data: any, hooks: CloneHook<T, R> | CloneHook<T, R>[] = [], params: CrawlParams<T, R> = {}) => {
   hooks = isArray(hooks) ? hooks : [hooks]
   const root = { "#": data }
 

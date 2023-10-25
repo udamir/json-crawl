@@ -1,6 +1,6 @@
-import { CrawlRules, CrawlRulesFunc, CrawlRulesKey, JsonPath } from "./types"
+import { CrawlChildType, CrawlRules, CrawlRulesFunc, CrawlRulesKey, JsonPath } from "./types"
 
-export const getNodeRules = <R, T>(
+export const getNodeRules = <T extends {}, R extends {} = {}>(
   rules = {} as CrawlRules<R, T>,
   key: string | number,
   path: JsonPath,
@@ -8,13 +8,13 @@ export const getNodeRules = <R, T>(
 ): CrawlRules<R, T> | undefined => {
   const rulesKey: CrawlRulesKey = `/${key}`
 
-  let node: CrawlRules<R, T> | CrawlRulesFunc<R, T> = rules
+  let node: CrawlChildType<R, T> = rules
   if (rulesKey in node) {
-    node = node[rulesKey]
+    node = node[rulesKey] as CrawlChildType<R, T>
   } else if ("/*" in node) {
-    node = node["/*"]
+    node = node["/*"] as CrawlChildType<R, T>
   } else if ("/**" in node) {
-    node = node["/**"]
+    node = node["/**"] as CrawlChildType<R, T>
     return { ...typeof node === "function" ? node(path, state) : node, "/**": node }
   } else {
     return
@@ -23,7 +23,7 @@ export const getNodeRules = <R, T>(
   return typeof node === "function" ? node(path, state) : node
 }
 
-export const findCrawlRules = <R, T = any>(rules: CrawlRules<R, T>, path: JsonPath, state = {} as T): CrawlRules<R, T> | undefined => {
+export const findCrawlRules = <T extends {}, R extends {} = {}>(rules: CrawlRules<R, T>, path: JsonPath, state = {} as T): CrawlRules<R | {}, T> | undefined => {
   let node: CrawlRules<R, T> | CrawlRulesFunc<R, T> = rules
 
   for (let index = 0; index < path.length; index++) {
@@ -35,7 +35,7 @@ export const findCrawlRules = <R, T = any>(rules: CrawlRules<R, T>, path: JsonPa
   return node
 }
 
-export const mergeRules = <R, T = any>(rules: CrawlRules<R, T>[]): CrawlRules<R, T> => {
+export const mergeRules = <T extends {}, R extends {} = {}>(rules: CrawlRules<R, T>[]): CrawlRules<R, T> => {
   const _rules: any = {}
 
   const keys: Set<string> = rules.reduce((set, r) => { 

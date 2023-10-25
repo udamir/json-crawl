@@ -29,9 +29,9 @@ describe('rules test', () => {
       }
     }
 
-    const hook: SyncCloneHook = ({value, state, rules }) => {
+    const hook: SyncCloneHook<TestState, TestRule> = ({ value, state, rules }) => {
       if (rules && "$" in rules) {
-        rules.$(value, state)
+        rules.$?.(value, state)
       }
     }
 
@@ -66,8 +66,8 @@ describe('rules test', () => {
       }
     }
 
-    const hook: SyncCloneHook = ({ value, rules }) => {
-      if (rules && "$" in rules && rules.$(value)) {
+    const hook: SyncCloneHook<TestState, TestRule> = ({ value, rules, state }) => {
+      if (rules && "$" in rules && rules.$?.(value, state)) {
         return { value: (value as string).toUpperCase() }
       }
     }
@@ -108,13 +108,13 @@ describe('rules test', () => {
       }
     }
 
-    const hook: SyncCloneHook = ({ value, rules }) => {
+    const hook: SyncCloneHook<TestState, TestRule> = ({ value, rules, state }) => {
       if (!rules) { return }
       if ("$$" in rules) {
-        const m = rules["$$"]
+        const m = rules["$$"]!
         return { value: <number>value * m }
       }
-      if ("$" in rules && rules.$(value)) {
+      if ("$" in rules && rules.$?.(value, state)) {
         return { value: (value as string).toUpperCase() }
       }
     }

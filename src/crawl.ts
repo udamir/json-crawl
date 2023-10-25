@@ -2,7 +2,7 @@ import type { CrawlHook, ExitHook, SyncCrawlHook, JsonPath, CrawlRules, CrawlPar
 import { getNodeRules, mergeRules } from "./rules"
 import { isArray, isObject } from "./utils"
 
-interface CrawlNode<T, R> {
+interface CrawlNode<T extends {}, R extends {}> {
   // node path
   path: JsonPath
   // node data
@@ -22,7 +22,7 @@ interface CrawlNode<T, R> {
   hooks?: ExitHook[]
 }
 
-export const crawl = async <T, R = any>(data: any, hooks: CrawlHook<T, R> | CrawlHook<T, R>[], params: CrawlParams<T, R> = {}): Promise<void> => {
+export const crawl = async <T extends {}, R extends {} = {}>(data: any, hooks: CrawlHook<T, R> | CrawlHook<T, R>[], params: CrawlParams<T, R> = {}): Promise<void> => {
   hooks = isArray(hooks) ? hooks : [hooks]
   const _rules = isArray(params.rules) ? mergeRules(params.rules) : params.rules
 
@@ -74,7 +74,7 @@ export const crawl = async <T, R = any>(data: any, hooks: CrawlHook<T, R> | Craw
   }
 }
 
-export const syncCrawl = <T, R = any>(data: any, hooks: SyncCrawlHook<T, R> | SyncCrawlHook<T, R>[], params: CrawlParams<T, R> = {}): void => {
+export const syncCrawl = <T extends {}, R extends {} = {}>(data: any, hooks: SyncCrawlHook<T, R> | SyncCrawlHook<T, R>[], params: CrawlParams<T, R> = {}): void => {
   hooks = isArray(hooks) ? hooks : [hooks]
   const _rules = isArray(params.rules) ? mergeRules(params.rules) : params.rules
 

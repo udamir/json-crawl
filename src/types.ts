@@ -1,11 +1,11 @@
 export type JsonPath = (string | number)[]
 
-export interface CrawlParams<T, R = any> {
+export interface CrawlParams<T extends {}, R extends {} = {}> {
   state?: T
   rules?: CrawlRules<R, T> | CrawlRules<R, T>[]
 }
 
-export interface CrawlContext<T, R = any> {
+export interface CrawlContext<T extends {}, R extends {} = {}> {
   readonly value: unknown         // current node value
   readonly path: JsonPath         // path to current node
   readonly key: string | number   // current node key
@@ -15,7 +15,7 @@ export interface CrawlContext<T, R = any> {
 
 export type ExitHook = () => void
 
-export interface CrawlHookResponse<T, R> {
+export interface CrawlHookResponse<T extends {}, R extends {}> {
   value?: unknown,                        // updated value of current node for crawl
   state?: T                               // state for next crawl step
   rules?: CrawlRules<R, T>                // rules for next crawl step
@@ -24,20 +24,21 @@ export interface CrawlHookResponse<T, R> {
   done?: boolean                          // crawl of current node should be terminated
 }
 
-export type CloneState<T> = {
+export type CloneState<T extends {} = {}> = {
   root: { "#": any } 
   node: any
-} & (T extends object ? T : {})
+} & T
 
-export type CloneHook<T = any, R = any> = CrawlHook<CloneState<T>, R>
-export type CrawlHook<T = any, R = any> = (ctx: CrawlContext<T, R>) => Promise<CrawlHookResponse<T, R> | void> | CrawlHookResponse<T, R> | void
+export type CloneHook<T extends {} = {}, R extends {} = {}> = CrawlHook<CloneState<T>, R>
+export type CrawlHook<T extends {} = {}, R extends {} = {}> = (ctx: CrawlContext<T, R>) => Promise<CrawlHookResponse<T, R> | void> | CrawlHookResponse<T, R> | void
 
-export type SyncCloneHook<T = any, R = any> = SyncCrawlHook<CloneState<T>, R>
-export type SyncCrawlHook<T = any, R = any> = (ctx: CrawlContext<T, R>) => CrawlHookResponse<T, R> | void
+export type SyncCloneHook<T extends {} = {}, R extends {} = {}> = SyncCrawlHook<CloneState<T>, R>
+export type SyncCrawlHook<T extends {} = {}, R extends {} = {}> = (ctx: CrawlContext<T, R>) => CrawlHookResponse<T, R> | void
 
-export type CrawlRulesFunc<R, T = any> = (path: JsonPath, state: T) => CrawlRules<R, T>
+export type CrawlRulesFunc<R extends {}, T extends {} = {}> = (path: JsonPath, state: T) => CrawlRules<R, T>
 export type CrawlRulesKey = `/${string | number}`
+export type CrawlChildType<R extends {}, T extends {}> = CrawlRules<R, T> | CrawlRulesFunc<R, T>
 
-export type CrawlRules<R, T = any> = {
-  [key: CrawlRulesKey | '/*']: CrawlRules<R, T> | CrawlRulesFunc<R, T>
-} & (R | {})
+export type CrawlRules<R extends {} = {}, T extends {} = {}> = {
+  [key: CrawlRulesKey | '/*']: CrawlChildType<R | {}, T>
+} & R
