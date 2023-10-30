@@ -2,6 +2,7 @@
   "name": "json-crawl",
   "version": "0.3.1",
   "description": "Async and sync crawler for json object",
+  "type": "module",
   "module": "dist/index.mjs",
   "main": "dist/index.cjs",
   "browser": "dist/index.iife.js",
