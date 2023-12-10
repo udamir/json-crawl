@@ -6,7 +6,7 @@ interface EqualState {
   value: any
 }
 
-export const equal = (val1: any, val2: any): boolean => {
+export const equal = (val1: unknown, val2: unknown): boolean => {
   if (val1 === val2) { return true }
 
   let result = true 

@@ -14,7 +14,7 @@ interface CrawlNode<T extends {}, R extends {}> {
   keyIndex: number
   
   // node rules
-  rules?: CrawlRules<R, T> 
+  rules?: CrawlRules<R> 
 
   // node state
   state: T
@@ -43,7 +43,7 @@ export const crawl = async <T extends {}, R extends {} = {}>(data: any, hooks: C
     const key = node.keys[node.keyIndex++]
 
     const [value, path, rules] = nodes.length > 1 
-      ? [node.data[key], [...node.path, key], getNodeRules(node.rules, key, [...node.path, key], params.state)]
+      ? [node.data[key], [...node.path, key], getNodeRules(node.rules, key, [...node.path, key], node.data[key])]
       : [node.data, node.path, _rules] // root node
     
     let context: CrawlContext<T, R> | null = { value, path, key, state: node.state, rules }
@@ -95,7 +95,7 @@ export const syncCrawl = <T extends {}, R extends {} = {}>(data: any, hooks: Syn
     const key = node.keys[node.keyIndex++]
 
     const [value, path, rules] = nodes.length > 1 
-      ? [node.data[key], [...node.path, key], getNodeRules(node.rules, key, [...node.path, key], params.state)]
+      ? [node.data[key], [...node.path, key], getNodeRules(node.rules, key, [...node.path, key], node.data[key])]
       : [node.data, node.path, _rules] // root node
     
     let context: CrawlContext<T, R> | null = { value, path, key, state: node.state, rules }

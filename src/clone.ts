@@ -14,7 +14,7 @@ export const clone = async <T extends {}, R extends {} = {}>(data: any, hooks: C
 
   const _params: CrawlParams<CloneState<T>, R> = { 
     state: { ...params.state, root, node: root } as CloneState<T>,
-    ...params.rules ? { rules: params.rules as CrawlRules<R, CloneState<T>> } : {}
+    ...params.rules ? { rules: params.rules as CrawlRules<R> } : {}
   }
 
   await crawl<CloneState<T>, R>(data, [...hooks, cloneHook], _params)
@@ -34,7 +34,7 @@ export const syncClone = <T extends {}, R extends {} = {}>(data: any, hooks: Syn
 
   const _params: CrawlParams<CloneState<T>, R> = { 
     state: { ...params.state, root, node: root } as CloneState<T>,
-    ...params.rules ? { rules: params.rules as CrawlRules<R, CloneState<T>> } : {}
+    ...params.rules ? { rules: params.rules as CrawlRules<R> } : {}
   }
 
   syncCrawl<CloneState<T>, R>(data, [...hooks, cloneHook], _params)

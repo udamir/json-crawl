@@ -5,7 +5,7 @@ interface TestState {
 }
 
 type TestRule = { $?: (value: any, state: TestState) => any, $$?: number }
-type TestRules = CrawlRules<TestRule, TestState>
+type TestRules = CrawlRules<TestRule>
 
 describe('rules test', () => {
   it('should execute function for each node base on rules', () => {

@@ -12,7 +12,7 @@ You can use `crawl`/`syncCrawl` to traverse a JSON object and perform custom ope
 
 - **Crawling**: The `crawl`/`syncCrawl` function allows you to traverse a JSON object, performing custom operations at each node using hooks.
 - **Cloning**: The `clone`/`syncClone` function creates a deep copy of a JSON object, ensuring that nested objects and arrays are also cloned.
-- **Customizable Hooks**: Both `crawl` and `clone` functions accept hooks, allowing you to provide custom logic for each node during crawling or cloning. Hooks can modify values, state, or perform any desired operations.
+- **Customizable Hooks**: Both `crawl` and `clone` functions accept hooks, allowing you to provide custom logic for each node during crawling or cloning. Hooks can modify values, state, rules or perform any desired operations.
 - **Support for Async Hooks**: The `crawl` and `clone` functions supports asynchronous hooks, allowing you to perform asynchronous operations during crawling.
 
 ## Installation

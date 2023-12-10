@@ -1,41 +1,29 @@
-import { CrawlChildType, CrawlRules, CrawlRulesFunc, CrawlRulesKey, JsonPath } from "./types"
+import { CrawlChildType, CrawlRules, CrawlRulesKey, JsonPath } from "./types"
 
-export const getNodeRules = <T extends {}, R extends {} = {}>(
-  rules = {} as CrawlRules<R, T>,
+export const getNodeRules = <R extends {} = {}>(
+  rules = {} as CrawlRules<R>,
   key: string | number,
   path: JsonPath,
-  state = {} as T
-): CrawlRules<R, T> | undefined => {
+  value: unknown
+): CrawlRules<R> | undefined => {
   const rulesKey: CrawlRulesKey = `/${key}`
 
-  let node: CrawlChildType<R, T> = rules
+  let node: CrawlChildType<R> = rules
   if (rulesKey in node) {
-    node = node[rulesKey] as CrawlChildType<R, T>
+    node = node[rulesKey] as CrawlChildType<R>
   } else if ("/*" in node) {
-    node = node["/*"] as CrawlChildType<R, T>
+    node = node["/*"] as CrawlChildType<R>
   } else if ("/**" in node) {
-    node = node["/**"] as CrawlChildType<R, T>
-    return { ...typeof node === "function" ? node(path, state) : node, "/**": node }
+    node = node["/**"] as CrawlChildType<R>
+    return { ...typeof node === "function" ? node({ key,  path, value }) : node, "/**": node }
   } else {
     return
   }
   
-  return typeof node === "function" ? node(path, state) : node
+  return typeof node === "function" ? node({ key, path, value }) : node
 }
 
-export const findCrawlRules = <T extends {}, R extends {} = {}>(rules: CrawlRules<R, T>, path: JsonPath, state = {} as T): CrawlRules<R | {}, T> | undefined => {
-  let node: CrawlRules<R, T> | CrawlRulesFunc<R, T> = rules
-
-  for (let index = 0; index < path.length; index++) {
-    node = getNodeRules(node, path[index], path.slice(0, index), state)!
-    
-    if (!node) { return }
-  }
-
-  return node
-}
-
-export const mergeRules = <T extends {}, R extends {} = {}>(rules: CrawlRules<R, T>[]): CrawlRules<R, T> => {
+export const mergeRules = <T extends {}, R extends {} = {}>(rules: CrawlRules<R>[]): CrawlRules<R> => {
   const _rules: any = {}
 
   const keys: Set<string> = rules.reduce((set, r) => { 
