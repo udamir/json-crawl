@@ -9,20 +9,20 @@ export const getNodeRules = <R extends {} = {}>(
   const rulesKey: CrawlRulesKey = `/${key}`
 
   const globalRules = typeof rules["/**"] === "function" ? rules["/**"]({ key, path, value }) : rules["/**"]
+  const localRules = typeof rules["/*"] === "function" ? rules["/*"]({ key, path, value }) : rules["/*"]
 
-  let node: CrawlChildType<R>
+  let node = {} as CrawlChildType<R>
   if (rulesKey in rules) {
     node = rules[rulesKey] as CrawlChildType<R>
-  } else if ("/*" in rules) {
-    node = rules["/*"] as CrawlChildType<R>
-  } else if ("/**" in rules) {
-    node = globalRules as CrawlChildType<R>
-  } else {
+  } else if (!globalRules && !localRules) {
     return
   }
 
   node = typeof node === "function" ? node({ key, path, value }) : node
 
+  if (localRules) {
+    node = { ...localRules, ...node }
+  }
   if (globalRules) {
     return { "/**": rules["/**"], ...globalRules, ...node }
   }
