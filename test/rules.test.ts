@@ -130,4 +130,44 @@ describe('rules test', () => {
       },
     })
   })
+
+  it('should pass global rule to each child nodes', () => {
+    const testRules: TestRules = {
+      "/name": { $: () => false },
+      "/**": { $$: 1, $: () => true },
+    }
+    
+    const source = {
+      name: "John",
+      age: 30,
+      address: {
+        street: "123 Main St",
+        city: "New York",
+        building: 5,
+      }
+    }
+
+    const hook: SyncCloneHook<TestState, TestRule> = ({ value, rules, state }) => {
+      if (!rules) { return }
+      if ("$$" in rules && typeof value === "number") {
+        const m = rules["$$"]!
+        return { value: value + m }
+      }
+      if ("$" in rules && rules.$?.(value, state) && typeof value === "string") {
+        return { value: value.toUpperCase() }
+      }
+    }
+
+    const data = syncClone(source, hook, { rules: [testRules] })
+
+    expect(data).toEqual({
+      name: "John",
+      age: 31,
+      address: {
+        street: "123 MAIN ST",
+        city: "NEW YORK",
+        building: 6,
+      },
+    })
+  })
 })

@@ -8,19 +8,26 @@ export const getNodeRules = <R extends {} = {}>(
 ): CrawlRules<R> | undefined => {
   const rulesKey: CrawlRulesKey = `/${key}`
 
-  let node: CrawlChildType<R> = rules
-  if (rulesKey in node) {
-    node = node[rulesKey] as CrawlChildType<R>
-  } else if ("/*" in node) {
-    node = node["/*"] as CrawlChildType<R>
-  } else if ("/**" in node) {
-    node = node["/**"] as CrawlChildType<R>
-    return { ...typeof node === "function" ? node({ key,  path, value }) : node, "/**": node }
+  const globalRules = typeof rules["/**"] === "function" ? rules["/**"]({ key, path, value }) : rules["/**"]
+
+  let node: CrawlChildType<R>
+  if (rulesKey in rules) {
+    node = rules[rulesKey] as CrawlChildType<R>
+  } else if ("/*" in rules) {
+    node = rules["/*"] as CrawlChildType<R>
+  } else if ("/**" in rules) {
+    node = globalRules as CrawlChildType<R>
   } else {
     return
   }
+
+  node = typeof node === "function" ? node({ key, path, value }) : node
+
+  if (globalRules) {
+    return { "/**": rules["/**"], ...globalRules, ...node }
+  }
   
-  return typeof node === "function" ? node({ key, path, value }) : node
+  return node
 }
 
 export const mergeRules = <T extends {}, R extends {} = {}>(rules: CrawlRules<R>[]): CrawlRules<R> => {
