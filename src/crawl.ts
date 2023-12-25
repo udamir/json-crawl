@@ -22,7 +22,7 @@ interface CrawlNode<T extends {}, R extends {}> {
   hooks?: ExitHook[]
 }
 
-export const crawl = async <T extends {}, R extends {} = {}>(data: any, hooks: CrawlHook<T, R> | CrawlHook<T, R>[], params: CrawlParams<T, R> = {}): Promise<void> => {
+export const crawl = async <T extends {}, R extends {} = {}>(data: any, hooks: CrawlHook<T, R> | CrawlHook<T, R>[] | SyncCrawlHook<T, R> | SyncCrawlHook<T, R>[], params: CrawlParams<T, R> = {}): Promise<void> => {
   hooks = isArray(hooks) ? hooks : [hooks]
   const _rules = isArray(params.rules) ? mergeRules(params.rules) : params.rules
 

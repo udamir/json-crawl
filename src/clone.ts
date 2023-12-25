@@ -2,68 +2,71 @@ import type { CloneHook, CloneState, CrawlParams, SyncCloneHook } from "./types"
 import { crawl, syncCrawl } from "./crawl"
 import { isObject } from "./utils"
 
-export const clone = async <T extends {}, R extends {} = {}>(data: unknown, hooks: CloneHook<T, R> | CloneHook<T, R>[] = [], params: CrawlParams<T, R> = {}) => {
-  hooks = Array.isArray(hooks) ? hooks : [hooks]
-  const root: any = {}
+const createCloneHooks = <T extends {}, R extends {} = {}>(): SyncCloneHook<T, R>[] => {
   const nodes = new WeakMap<object, object | Array<unknown>>()
+  let originalValue: unknown = undefined
 
-  const cloneHook: CloneHook<T, R> = async ({ value, path, key, state }) => {
-    key = path.length ? key : "#"
-
-    if (isObject(value)) {
-      if (nodes.has(value)) {
-        state.node[key] = nodes.get(value)
-        return { done: true }
-      }
-      const _value = Array.isArray(value) ? [] : {}
-      state.node[key] = _value
-      nodes.set(value, _value)
-    } else {
-      state.node[key] = value
-    }    
-
-    return { value, state: { ...state, node: state.node[key] }}
+  const preHook: SyncCloneHook<T, R> = ({ value }) => {
+    originalValue = value
   }
-
-  const _params: CrawlParams<CloneState<T>, R> = { 
-    state: { ...params.state ?? {} as T, root, node: root },
-    ...params.rules ? { rules: params.rules } : {}
-  }
-
-  await crawl<CloneState<T>, R>(data, [...hooks, cloneHook], _params)
-
-  return root["#"]
-}
-
-export const syncClone = <T extends {}, R extends {} = {}>(data: unknown, hooks: SyncCloneHook<T, R> | SyncCloneHook<T, R>[] = [], params: CrawlParams<T, R> = {}) => {
-  hooks = Array.isArray(hooks) ? hooks : [hooks]
-  const root: any = {}
-  const nodes = new WeakMap<object, object | Array<unknown>>()
 
   const cloneHook: SyncCloneHook<T, R> = ({ value, path, key, state }) => {
     key = path.length ? key : "#"
 
-    if (isObject(value)) {
-      if (nodes.has(value)) {
-        state.node[key] = nodes.get(value)
+    if (isObject(originalValue)) {
+      if (nodes.has(originalValue)) {
+        state.node[key] = nodes.get(originalValue)
         return { done: true }
       }
       const _value = Array.isArray(value) ? [] : {}
       state.node[key] = _value
-      nodes.set(value, _value)
+      nodes.set(originalValue, _value)
     } else {
       state.node[key] = value
     }    
-    
+
     return { value, state: { ...state, node: state.node[key] }}
   }
+
+  return [preHook, cloneHook]
+}
+
+export const clone = async <T extends {}, R extends {} = {}>(
+  data: unknown, 
+  hooks: CloneHook<T, R> | CloneHook<T, R>[] | SyncCloneHook<T, R> | SyncCloneHook<T, R>[] = [],
+  params: CrawlParams<T, R> = {}
+) => {
+  hooks = Array.isArray(hooks) ? hooks : [hooks]
+  const root = { "#": undefined }
 
   const _params: CrawlParams<CloneState<T>, R> = { 
     state: { ...params.state ?? {} as T, root, node: root },
     ...params.rules ? { rules: params.rules } : {}
   }
 
-  syncCrawl<CloneState<T>, R>(data, [...hooks, cloneHook], _params)
+  const [ preHook, cloneHook ] = createCloneHooks<T, R>()
+
+  await crawl<CloneState<T>, R>(data, [ preHook, ...hooks, cloneHook], _params)
+
+  return root["#"]
+}
+
+export const syncClone = <T extends {}, R extends {} = {}>(
+  data: unknown,
+  hooks: SyncCloneHook<T, R> | SyncCloneHook<T, R>[] = [],
+  params: CrawlParams<T, R> = {}
+) => {
+  hooks = Array.isArray(hooks) ? hooks : [hooks]
+  const root = { "#": undefined }
+
+  const _params: CrawlParams<CloneState<T>, R> = { 
+    state: { ...params.state ?? {} as T, root, node: root },
+    ...params.rules ? { rules: params.rules } : {}
+  }
+
+  const [ preHook, cloneHook ] = createCloneHooks<T, R>()
+
+  syncCrawl<CloneState<T>, R>(data, [preHook, ...hooks, cloneHook], _params)
 
   return root["#"]
 }

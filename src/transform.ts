@@ -1,10 +1,10 @@
-import type { CloneHook, CloneState, CrawlParams, CrawlRules } from "./types"
+import type { CloneHook, CloneState, CrawlParams } from "./types"
 import { isArray, isObject } from "./utils"
 import { crawl } from "./crawl"
 
 export const transform = async <T extends {}, R extends {} = {}>(data: any, hooks: CloneHook<T, R> | CloneHook<T, R>[] = [], params: CrawlParams<T, R> = {}) => {
   hooks = isArray(hooks) ? hooks : [hooks]
-  const root: Record<string, unknown> = { "#": data }
+  const root = { "#": data }
 
   const transformHook: CloneHook<T, R> = async ({ value, path, key, state }) => {
     key = path.length ? key : "#"
@@ -21,8 +21,8 @@ export const transform = async <T extends {}, R extends {} = {}>(data: any, hook
   }
 
   const _params: CrawlParams<CloneState<T>, R> = { 
-    state: { ...params.state, root, node: root } as CloneState<T>,
-    ...params.rules ? { rules: params.rules as CrawlRules<R> } : {}
+    state: { ...params.state ?? {} as T, root, node: root },
+    ...params.rules ? { rules: params.rules } : {}
   }
 
   await crawl(data, [...hooks, transformHook], _params)
