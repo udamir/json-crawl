@@ -1,4 +1,4 @@
-import { SyncCrawlHook } from "./types"
+import type { SyncCrawlHook } from "./types"
 import { syncCrawl } from "./crawl"
 import { isArray } from "./utils"
 

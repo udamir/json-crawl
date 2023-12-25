@@ -1,4 +1,4 @@
-import { CrawlChildType, CrawlRules, CrawlRulesKey, JsonPath } from "./types"
+import type { CrawlChildType, CrawlRules, CrawlRulesKey, JsonPath } from "./types"
 
 export const getNodeRules = <R extends {} = {}>(
   rules = {} as CrawlRules<R>,
