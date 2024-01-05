@@ -35,7 +35,7 @@ export const clone = async <T extends {}, R extends {} = {}>(
   data: unknown, 
   hooks: CloneHook<T, R> | CloneHook<T, R>[] | SyncCloneHook<T, R> | SyncCloneHook<T, R>[] = [],
   params: CrawlParams<T, R> = {}
-) => {
+): Promise<unknown> => {
   hooks = Array.isArray(hooks) ? hooks : [hooks]
   const root = { "#": undefined }
 
@@ -55,7 +55,7 @@ export const syncClone = <T extends {}, R extends {} = {}>(
   data: unknown,
   hooks: SyncCloneHook<T, R> | SyncCloneHook<T, R>[] = [],
   params: CrawlParams<T, R> = {}
-) => {
+): unknown => {
   hooks = Array.isArray(hooks) ? hooks : [hooks]
   const root = { "#": undefined }
 
