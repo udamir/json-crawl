@@ -13,7 +13,7 @@ const createCloneHooks = <T extends {}, R extends {} = {}>(): SyncCloneHook<T, R
   const cloneHook: SyncCloneHook<T, R> = ({ value, path, key, state }) => {
     key = path.length ? key : "#"
 
-    if (isObject(originalValue)) {
+    if (isObject(originalValue) && isObject(value)) {
       if (nodes.has(originalValue)) {
         state.node[key] = nodes.get(originalValue)
         return { done: true }

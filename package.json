@@ -1,6 +1,6 @@
 {
   "name": "json-crawl",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Async and sync crawler for json object",
   "type": "commonjs",
   "module": "dist/index.mjs",
