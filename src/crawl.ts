@@ -98,12 +98,15 @@ const nextChild = <T extends {}, R extends {}>(frame: Frame<T, R>, cursor: Curso
     const path = childPath(parent.path!, key)
     cursor.node = undefined
     cursor.path = path
-    cursor.context = { value, path, key, state: frame.state, rules: resolveNodeRules(frame.rules, key, path, undefined, value, frame.prefixes) }
+    // without rules there is nothing to resolve; the call (and the function context it allocates) is skipped
+    const rules = frame.rules === undefined ? undefined : resolveNodeRules(frame.rules, key, path, undefined, value, frame.prefixes)
+    cursor.context = { value, path, key, state: frame.state, rules }
   } else {
     const node = childPathNode(parent, key)
     cursor.node = node
     cursor.path = undefined
-    cursor.context = createContext(value, node, key, frame.state, resolveNodeRules(frame.rules, key, undefined, node, value, frame.prefixes))
+    const rules = frame.rules === undefined ? undefined : resolveNodeRules(frame.rules, key, undefined, node, value, frame.prefixes)
+    cursor.context = createContext(value, node, key, frame.state, rules)
   }
   return true
 }
