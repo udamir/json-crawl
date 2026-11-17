@@ -16,7 +16,7 @@ pnpm run all        # builds the library (pnpm build in the repository root), ge
 | Node | v26.13.0 |
 | CPU | Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz, 16 logical cores, 16 GB RAM |
 | OS | Darwin 24.6.0 (darwin x64) |
-| Date | 2026-11-17T22:11:03.402Z |
+| Date | 2026-11-17T23:46:30.794Z |
 
 | library | version |
 |---|---|
@@ -49,10 +49,10 @@ Fixtures are generated deterministically by `fixtures/generate.mjs`: `wide-10k` 
 
 | fixture | json-crawl 1.0.0 | json-crawl 0.5.3 | traverse [1] | object-traversal [2] | deep-for-each [3] | tree-crawl [4] | json-schema-traverse [5] |
 |---|---|---|---|---|---|---|---|
-| wide-10k (10,001 nodes) | 1.9 / 1.4 | 6.4 / 5.7 | 6.0 / 5.6 | 1.4 / 1.4 | 1.5 / 1.3 | 5.8 / 5.4 | 2.0 / 2.0 |
-| deep-5k (15,003 nodes) | 192.2 / 181.3 | 239.9 / 197.9 | — [6] | 1.1 / 1.1 | — [7] | 0.6 / 0.5 | — [8] |
-| array-100k (100,001 nodes) | 6.4 / 6.2 | 72.8 / 67.5 | 53.8 / 51.7 | 19.2 / 18.0 | 6.0 / 5.9 | 22.6 / 20.8 | 0.0 / 0.0 |
-| openapi (317,649 nodes) | 42.8 / 41.2 | 223.3 / 213.4 | 179.3 / 176.3 | 49.8 / 44.0 | 60.8 / 59.1 | 18.4 / 17.0 | 33.2 / 31.1 |
+| wide-10k (10,001 nodes) | 1.3 / 1.3 | 5.6 / 5.5 | 5.6 / 5.6 | 1.4 / 1.3 | 1.3 / 1.2 | 5.2 / 5.1 | 2.0 / 1.9 |
+| deep-5k (15,003 nodes) | 83.4 / 80.0 | 769.7 / 664.1 | — [6] | 3.4 / 2.8 | — [7] | 1.1 / 1.1 | — [8] |
+| array-100k (100,001 nodes) | 13.7 / 12.0 | 69.1 / 64.6 | 56.4 / 49.2 | 18.3 / 18.1 | 5.9 / 5.8 | 20.2 / 20.0 | 0.0 / 0.0 |
+| openapi (317,649 nodes) | 28.9 / 28.0 | 210.9 / 204.8 | 166.0 / 161.4 | 44.2 / 42.6 | 55.6 / 55.4 | 16.5 / 16.2 | 31.2 / 30.7 |
 
 [1] traverse: path is an array of string keys; recursive  
 [2] object-traversal: path is a dotted string; cycle handling disabled  
@@ -67,8 +67,8 @@ Fixtures are generated deterministically by `fixtures/generate.mjs`: `wide-10k` 
 
 | fixture | json-crawl 1.0.0 | json-crawl 0.5.3 |
 |---|---|---|
-| wide-10k (10,001 nodes) | 1.5 / 1.4 | 7.8 / 7.4 |
-| openapi (317,649 nodes) | 40.1 / 38.8 | 242.7 / 239.1 |
+| wide-10k (10,001 nodes) | 1.4 / 1.4 | 7.7 / 7.2 |
+| openapi (317,649 nodes) | 31.9 / 30.6 | 230.6 / 227.2 |
 
 ### Clone
 
@@ -76,10 +76,10 @@ Fixtures are generated deterministically by `fixtures/generate.mjs`: `wide-10k` 
 
 | fixture | json-crawl 1.0.0 | json-crawl 1.0.0 tree [1] | json-crawl 0.5.3 | rfdc [2] | klona [3] | klona/json [4] | lodash.clonedeep | clone | structuredClone [5] | JSON.parse(JSON.stringify()) [6] |
 |---|---|---|---|---|---|---|---|---|---|---|
-| wide-10k (10,001 nodes) | 2.1 / 2.1 | 2.0 / 2.0 | 10.6 / 10.1 | 2.0 / 1.9 | 1.8 / 1.7 | 1.6 / 1.6 | 2.4 / 1.9 | 2.3 / 2.2 | 4.2 / 3.7 | 3.3 / 2.9 |
-| deep-5k (15,003 nodes) | 15.5 / 11.0 | 13.1 / 9.5 | 212.7 / 193.6 | — [7] | 0.6 / 0.6 | — [8] | — [9] | — [10] | — [11] | 1.6 / 1.5 |
-| array-100k (100,001 nodes) | 11.3 / 10.7 | 9.7 / 9.1 | 94.9 / 87.7 | 5.5 / 5.3 | 1.0 / 0.9 | 0.5 / 0.4 | 4.2 / 4.0 | 8.2 / 7.8 | 3.7 / 3.6 | 7.5 / 5.8 |
-| openapi (317,649 nodes) | 136.8 / 131.2 | 94.3 / 88.3 | 811.9 / 371.9 | 49.3 / 44.7 | 49.4 / 42.1 | 40.2 / 34.1 | 120.3 / 114.7 | 2.24 s / 2.18 s † | 138.8 / 137.8 | 59.3 / 58.3 |
+| wide-10k (10,001 nodes) | 1.8 / 1.8 | 1.5 / 1.5 | 9.3 / 9.2 | 1.8 / 1.8 | 1.7 / 1.7 | 1.6 / 1.6 | 2.0 / 2.0 | 2.1 / 2.1 | 4.0 / 3.9 | 3.0 / 3.0 |
+| deep-5k (15,003 nodes) | 0.8 / 0.8 | 0.5 / 0.5 | 200.9 / 192.6 | — [7] | 0.7 / 0.7 | — [8] | — [9] | — [10] | — [11] | 1.4 / 1.4 |
+| array-100k (100,001 nodes) | 0.7 / 0.7 | 0.3 / 0.3 | 86.8 / 85.5 | 5.3 / 5.2 | 0.9 / 0.9 | 0.4 / 0.4 | 3.7 / 3.6 | 8.2 / 7.6 | 3.3 / 3.2 | 5.2 / 5.1 |
+| openapi (317,649 nodes) | 72.8 / 63.8 | 40.7 / 36.7 | 394.0 / 379.2 | 45.5 / 40.6 | 41.2 / 40.5 | 39.4 / 33.8 | 111.6 / 107.5 | 2.22 s / 2.12 s † | 195.9 / 160.0 | 78.0 / 73.7 |
 
 [1] json-crawl 1.0.0 tree: circular: false (no cycle or shared-reference tracking)  
 [2] rfdc: no cycle handling  
@@ -97,8 +97,8 @@ Fixtures are generated deterministically by `fixtures/generate.mjs`: `wide-10k` 
 
 | fixture | json-crawl 1.0.0 | json-crawl 0.5.3 | traverse map [1] | rfdc + traverse update [2] | JSON.parse reviver [3] |
 |---|---|---|---|---|---|
-| array-100k (100,001 nodes) | 13.5 / 13.3 | 106.7 / 104.0 | 80.8 / 79.8 | 58.1 / 57.6 | 41.9 / 41.2 |
-| openapi (317,649 nodes) | 190.5 / 151.7 | 443.6 / 418.7 † | 759.8 / 694.2 † | 249.2 / 243.7 | 141.9 / 133.5 |
+| array-100k (100,001 nodes) | 8.6 / 8.2 | 120.6 / 118.1 | 76.8 / 75.4 | 54.6 / 54.0 | 39.0 / 38.8 |
+| openapi (317,649 nodes) | 169.3 / 144.3 | 451.7 / 433.4 † | 641.0 / 626.8 † | 227.4 / 224.3 | 140.7 / 138.4 |
 
 [1] traverse map: traverse(doc).map with this.update  
 [2] rfdc + traverse update: two passes: rfdc copy, then an in-place traverse update  
@@ -110,10 +110,10 @@ Fixtures are generated deterministically by `fixtures/generate.mjs`: `wide-10k` 
 
 | fixture | json-crawl 1.0.0 | json-crawl 0.5.3 | fast-deep-equal [1] | dequal [2] | fast-equals [3] | lodash.isequal | deep-equal [4] | util.isDeepStrictEqual [5] |
 |---|---|---|---|---|---|---|---|---|
-| wide-10k (10,001 nodes) | 2.1 / 1.9 | 164.0 / 152.5 | 2.5 / 2.5 | 4.3 / 3.2 | 2.3 / 2.3 | 2.8 / 2.7 | 3.2 / 3.1 | 2.9 / 2.6 |
-| deep-5k (15,003 nodes) | 1.0 / 1.0 | 234.5 / 204.5 | 0.8 / 0.8 | 1.1 / 1.0 | — [6] | — [7] | — [8] | — [9] |
-| array-100k (100,001 nodes) | 0.5 / 0.5 | 22.00 s / 21.90 s † | 0.8 / 0.6 | 0.7 / 0.7 | 0.5 / 0.5 | 0.7 / 0.7 | 16.2 / 15.1 | 0.7 / 0.7 |
-| openapi (317,649 nodes) | 32.0 / 30.2 | 269.9 / 267.9 | 37.8 / 37.0 | 42.4 / 41.5 | 34.0 / 33.2 | 102.8 / 101.5 | 26.91 s / 26.62 s † | 96.9 / 94.4 |
+| wide-10k (10,001 nodes) | 2.1 / 2.1 | 101.0 / 99.0 | 2.0 / 2.0 | 2.2 / 2.1 | 1.9 / 1.8 | 2.2 / 2.1 | 2.5 / 2.5 | 2.0 / 2.0 |
+| deep-5k (15,003 nodes) | 0.9 / 0.9 | 227.4 / 206.6 | 0.9 / 0.9 | 1.1 / 1.1 | — [6] | — [7] | — [8] | — [9] |
+| array-100k (100,001 nodes) | 0.5 / 0.5 | 21.44 s / 21.16 s † | 0.7 / 0.6 | 0.7 / 0.7 | 0.5 / 0.5 | 0.7 / 0.7 | 16.2 / 14.9 | 0.8 / 0.7 |
+| openapi (317,649 nodes) | 31.5 / 30.8 | 266.8 / 265.4 | 38.0 / 37.6 | 41.6 / 40.9 | 37.8 / 34.3 | 104.9 / 103.2 | 24.78 s / 24.65 s † | 77.5 / 74.8 |
 
 [1] fast-deep-equal: no cycle handling  
 [2] dequal: no cycle handling  
@@ -131,13 +131,13 @@ Fixtures are generated deterministically by `fixtures/generate.mjs`: `wide-10k` 
 
 | fixture | json-crawl 1.0.0 | json-crawl 0.5.3 |
 |---|---|---|
-| openapi (317,649 nodes) | 156.1 / 155.1 | 327.8 / 309.3 |
+| openapi (317,649 nodes) | 95.0 / 93.5 | 271.4 / 260.4 |
 
 **x- extension rule at every depth**, median / min ms (lower is better)
 
 | fixture | json-crawl 1.0.0 [1] | json-crawl 0.5.3 [2] |
 |---|---|---|
-| openapi (317,649 nodes) | 173.8 / 168.0 | 239.9 / 239.0 |
+| openapi (317,649 nodes) | 53.6 / 52.2 | 237.0 / 228.6 |
 
 [1] json-crawl 1.0.0: "/x-*" prefix rule  
 [2] json-crawl 0.5.3: no prefix rules: emulated with a /* function rule
