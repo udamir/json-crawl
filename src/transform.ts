@@ -7,6 +7,16 @@ import { crawl } from "./crawl.ts"
 // internal state of the transform: `pending` collects the indexes removed from the array `node`, compacted on exit
 type TransformState<T extends {}> = CloneState<T> & { pending?: number[] }
 
+// Exit hook of an array node: splices out the elements removed while the array was crawled. Built here rather than
+// inline, so that the transform hook itself captures nothing and allocates no context per call.
+const compactArray = (array: unknown[], childState: { pending?: number[] }) => (): void => {
+  const pending = childState.pending
+  if (pending) {
+    // indexes were recorded in ascending order; splicing from the end keeps the remaining indexes valid
+    for (let i = pending.length - 1; i >= 0; i--) { array.splice(pending[i], 1) }
+  }
+}
+
 /**
  * Transforms a document in place. Hooks return `{ value }` to replace the current node in its parent (at the root the
  * replacement becomes the result), `{ value: REMOVE }` to delete it (object keys are deleted, array elements are spliced
@@ -46,16 +56,7 @@ export const transform = async <T extends {}, R extends {} = {}>(
     if (!isArray(value)) {
       return { state: childState }
     }
-    return {
-      state: childState,
-      exitHook: () => {
-        const pending = childState.pending
-        if (pending) {
-          // indexes were recorded in ascending order; splicing from the end keeps the remaining indexes valid
-          for (let i = pending.length - 1; i >= 0; i--) { value.splice(pending[i], 1) }
-        }
-      },
-    }
+    return { state: childState, exitHook: compactArray(value, childState) }
   }
 
   const _params: CrawlParams<TransformState<T>, R> = {
