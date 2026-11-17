@@ -45,7 +45,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-  # the published bundle targets ES2020 and supports Node >= 18: load it on the oldest supported versions
+  # the published bundle targets ES2022 and supports Node >= 18: load it on the oldest supported versions
   runtime:
     name: dist on Node ${{ matrix.node }}
     needs: test

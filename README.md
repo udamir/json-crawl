@@ -16,7 +16,7 @@ Walk, clone, transform and compare JSON documents with hooks. Zero dependencies,
 pnpm add json-crawl     # or: npm install json-crawl / yarn add json-crawl
 ```
 
-The package ships ES modules, CommonJS and TypeScript declarations for both, plus a minified browser build (`dist/index.iife.js`, global `JsonCrawl`). It runs on Node.js 18+ and any ES2020 runtime.
+The package ships ES modules, CommonJS and TypeScript declarations for both, plus a minified browser build (`dist/index.iife.js`, global `JsonCrawl`). It runs on Node.js 18+ and any ES2022 runtime.
 
 ## Quick start
 

@@ -60,24 +60,46 @@ const createContext = <T extends {}, R extends {}>(
   rules: CrawlRules<R> | undefined
 ): CrawlContext<T, R> => node.path ? { value, path: node.path, key, state, rules } : lazyContext(value, node, key, state, rules)
 
-// kept out of `createContext`, so that the accessor literal does not weigh on the common plain-object path
+// Context of a deep node. Every instance gets the same accessor pair (defined once, read through private fields), so
+// all deep contexts share one hidden class with fast properties and no closure is allocated per context. The fields
+// are only declared, so that the own properties are created in the constructor in the order of a plain context
+// (value, path, key, state, rules).
+class DeepContext<T extends {}, R extends {}> {
+  declare value: unknown
+  declare path: JsonPath
+  declare key: string | number | undefined
+  declare state: T
+  declare rules: CrawlRules<R> | undefined
+  #node: PathNode
+  #path: JsonPath | undefined = undefined
+
+  static readonly pathDescriptor: PropertyDescriptor = {
+    get(this: DeepContext<{}, {}>): JsonPath { return this.#path ??= materializePath(this.#node) },
+    set(this: DeepContext<{}, {}>, value: JsonPath): void {
+      Object.defineProperty(this, "path", { value, writable: true, enumerable: true, configurable: true })
+    },
+    enumerable: true,
+    configurable: true,
+  }
+
+  constructor(value: unknown, node: PathNode, key: string | number | undefined, state: T, rules: CrawlRules<R> | undefined) {
+    this.value = value
+    this.#node = node
+    Object.defineProperty(this, "path", DeepContext.pathDescriptor)
+    this.key = key
+    this.state = state
+    this.rules = rules
+  }
+}
+
+// kept out of `createContext`, so that the class does not weigh on the common plain-object path
 const lazyContext = <T extends {}, R extends {}>(
   value: unknown,
   node: PathNode,
   key: string | number | undefined,
   state: T,
   rules: CrawlRules<R> | undefined
-): CrawlContext<T, R> => {
-  let path: JsonPath | undefined
-  return {
-    value,
-    get path() { return path ?? (path = materializePath(node)) },
-    set path(value: JsonPath) { Object.defineProperty(this, "path", { value, writable: true, enumerable: true, configurable: true }) },
-    key,
-    state,
-    rules,
-  }
-}
+): CrawlContext<T, R> => new DeepContext(value, node, key, state, rules)
 
 // Builds the context the children of `frame` are crawled with and advances the frame; `false` when the frame is exhausted.
 const nextChild = <T extends {}, R extends {}>(frame: Frame<T, R>, cursor: Cursor<T, R>): boolean => {

@@ -37,4 +37,4 @@
 
 ### Requirements
 
-Node.js 18 or any ES2020 runtime.
+Node.js 18 or any ES2022 runtime.

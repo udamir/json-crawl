@@ -6,7 +6,7 @@ export default defineConfig({
       // ESM + CommonJS with declarations for each (dist/index.mjs, index.cjs, index.d.mts, index.d.cts)
       entry: "src/index.ts",
       format: ["esm", "cjs"],
-      target: "es2020",
+      target: "es2022",
       platform: "neutral",
       fixedExtension: true,
       sourcemap: true,
@@ -17,7 +17,7 @@ export default defineConfig({
       entry: "src/index.ts",
       format: "iife",
       globalName: "JsonCrawl",
-      target: "es2020",
+      target: "es2022",
       platform: "browser",
       minify: true,
       sourcemap: true,
