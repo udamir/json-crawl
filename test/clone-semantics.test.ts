@@ -349,3 +349,56 @@ describe("E6 clone of crawled replacements", () => {
     expect(count(syncClone(source))).toBe(count(source))
   })
 })
+
+describe("E7 clone without hooks", () => {
+  // the graph of a value as a list of container ids per position, so that shared references and cycles can be compared
+  const shape = (root: unknown): unknown[] => {
+    const ids = new Map<object, number>()
+    const out: unknown[] = []
+    const walk = (value: unknown): void => {
+      if (typeof value !== "object" || value === null) { out.push(value); return }
+      if (ids.has(value)) { out.push(`#${ids.get(value)}`); return }
+      ids.set(value, ids.size)
+      out.push(Array.isArray(value) ? `[${value.length}` : "{")
+      const keys = Array.isArray(value) ? Object.keys(value) : Object.keys(value)
+      for (const key of keys) { out.push(key); walk((value as Record<string, unknown>)[key]) }
+      out.push("}")
+    }
+    walk(root)
+    return out
+  }
+
+  const shared = { s: 1 }
+  const cyclic: any = { name: "c", list: [1, , 3] }
+  cyclic.self = cyclic
+  cyclic.list.push(cyclic)
+  const samples: Record<string, unknown> = {
+    primitives: 1,
+    holes: [1, , [2, , ], , 4],
+    proto: JSON.parse('{"a": {"__proto__": {"p": 1}}, "__proto__": [1]}'),
+    shared: { a: shared, b: [shared, { c: shared }] },
+    cyclic,
+    nested: { a: [{ b: [{ c: [] }] }], d: {} },
+  }
+
+  it("E7.1 the copy without hooks matches the hook-based copy, with and without reference tracking", async () => {
+    const noop = () => {}
+    for (const [name, sample] of Object.entries(samples)) {
+      for (const circular of name === "cyclic" ? [true] : [true, false]) {
+        const fast = syncClone(sample, [], { circular })
+        const viaHooks = syncClone(sample, noop, { circular })
+        expect(shape(fast)).toEqual(shape(viaHooks))
+        expect(shape(await clone(sample, [], { circular }))).toEqual(shape(viaHooks))
+        if (typeof sample === "object") { expect(fast === sample).toBe(false) }
+      }
+    }
+  })
+
+  it("E7.2 an own __proto__ key stays an own property and the prototype is untouched", () => {
+    const copy: any = syncClone(samples.proto)
+    expect(Object.prototype.hasOwnProperty.call(copy, "__proto__")).toBe(true)
+    expect(Object.getPrototypeOf(copy)).toBe(Object.prototype)
+    expect(Object.getPrototypeOf(copy.a)).toBe(Object.prototype)
+  })
+})
+
