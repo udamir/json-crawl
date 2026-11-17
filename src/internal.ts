@@ -87,28 +87,41 @@ export const releasePath = (node: PathNode): void => {
 // Rules: prefix rule compilation and child rule resolution
 // ---------------------------------------------------------------------------------------------------------------------
 
-// Prefix rule keys (`"/x-*"`): a path key ending in a single `*`, other
-// than `/*` itself. A rule set is compiled into `[prefix, ruleKey, prefix, ruleKey, ...]`, longest prefix first, and
-// the result is cached by the rule set object when the set has prefix rules or more than `SCAN_LIMIT` keys. Small sets
-// without prefix rules are scanned on every lookup instead: rule sets built per node (the `/**` merge, function rules)
-// are mostly of that kind, and a `WeakMap` entry for a short-lived object costs several scans of a small one.
+// What the resolver needs to know about a rule set, found by one scan of its keys: its prefix rules (`"/x-*"`: a path
+// key ending in a single `*`, other than `/*`) as `[prefix, ruleKey, prefix, ruleKey, ...]`, longest prefix first, and
+// whether it has any exact path key at all (if not, the exact lookup is skipped). The result is cached by the rule set
+// object when the set has prefix rules or more than `SCAN_LIMIT` keys. Small sets without prefix rules are scanned on
+// every lookup instead: rule sets built per node (function rules) are mostly of that kind, and a `WeakMap` entry for a
+// short-lived object costs several scans of a small one. Rule sets are therefore treated as immutable once used.
+export interface CompiledRules {
+  readonly prefixes: readonly string[]
+  readonly exact: boolean
+}
+
 const STAR = 42 // "*"
 const SLASH = 47 // "/"
 const SCAN_LIMIT = 16
-const NO_PREFIXES: string[] = []
-const prefixCache = new WeakMap<object, string[]>()
+const NO_PREFIXES: CompiledRules = { prefixes: [], exact: true }
+const NO_PREFIXES_NO_EXACT: CompiledRules = { prefixes: [], exact: false }
+const compiledCache = new WeakMap<object, CompiledRules>()
 const hasOwn = Object.prototype.hasOwnProperty
 
-export const compilePrefixes = (rules: object): string[] => {
-  let compiled = prefixCache.get(rules)
-  if (compiled) { return compiled }
+export const compileRules = (rules: object): CompiledRules => {
+  const cached = compiledCache.get(rules)
+  if (cached) { return cached }
 
   let keys: string[] | undefined
+  let exact = false
   let count = 0
   for (const key in rules) {
     count++
+    if (key.charCodeAt(0) !== SLASH) { continue }
+    if (key.charCodeAt(key.length - 1) !== STAR) {
+      exact = true
+      continue
+    }
     // "/" + prefix + "*", prefix non-empty; "/*" (any key) and "/**" (any depth) are not prefix rules
-    if (key.length < 3 || key.charCodeAt(key.length - 1) !== STAR || key.charCodeAt(0) !== SLASH || key === "/**" || !hasOwn.call(rules, key)) { continue }
+    if (key.length < 3 || key === "/**" || !hasOwn.call(rules, key)) { continue }
     if (key.charCodeAt(key.length - 2) === STAR) {
       throw new TypeError(`Invalid prefix rule "${key}": a key ending in "**" is reserved (only "/**" is allowed; a prefix rule ends in a single "*")`)
     }
@@ -116,21 +129,37 @@ export const compilePrefixes = (rules: object): string[] => {
   }
 
   if (!keys) {
-    if (count > SCAN_LIMIT) { prefixCache.set(rules, NO_PREFIXES) }
-    return NO_PREFIXES
+    const none = exact ? NO_PREFIXES : NO_PREFIXES_NO_EXACT
+    if (count > SCAN_LIMIT) { compiledCache.set(rules, none) }
+    return none
   }
   // equal-length prefixes cannot both match one key, so only the length order matters
   keys.sort((a, b) => b.length - a.length)
-  compiled = []
-  for (const key of keys) { compiled.push(key.slice(1, -1), key) }
-  prefixCache.set(rules, compiled)
+  const prefixes: string[] = []
+  for (const key of keys) { prefixes.push(key.slice(1, -1), key) }
+  const compiled: CompiledRules = { prefixes, exact }
+  compiledCache.set(rules, compiled)
   return compiled
 }
 
-export const matchCompiled = <R extends {}>(rules: CrawlRules<R>, compiled: string[], key: string): CrawlChildType<R> | undefined => {
-  for (let i = 0; i < compiled.length; i += 2) {
-    if (key.startsWith(compiled[i])) { return rules[compiled[i + 1] as CrawlRulesKey] as CrawlChildType<R> }
+export const matchCompiled = <R extends {}>(rules: CrawlRules<R>, prefixes: readonly string[], key: string): CrawlChildType<R> | undefined => {
+  for (let i = 0; i < prefixes.length; i += 2) {
+    if (key.startsWith(prefixes[i])) { return rules[prefixes[i + 1] as CrawlRulesKey] as CrawlChildType<R> }
   }
+}
+
+// Rule keys of child keys ("/" + key), cached so that the exact lookup uses an interned string instead of building a
+// new one per node; the cache is bounded and starts over when full.
+const SLASH_KEYS_LIMIT = 4096
+let slashKeys = new Map<string | number, CrawlRulesKey>()
+const slashKey = (key: string | number): CrawlRulesKey => {
+  let ruleKey = slashKeys.get(key)
+  if (ruleKey === undefined) {
+    if (slashKeys.size >= SLASH_KEYS_LIMIT) { slashKeys = new Map() }
+    ruleKey = `/${key}`
+    slashKeys.set(key, ruleKey)
+  }
+  return ruleKey
 }
 
 // Rules context of a deep crawled node without a cached path: the path is materialized only if a rule function reads
@@ -145,54 +174,109 @@ const lazyRulesContext = (key: string | number, node: PathNode, value: unknown):
   }
 }
 
+const rulesContext = (key: string | number, path: JsonPath | undefined, pathNode: PathNode | undefined, value: unknown): CrawlRulesContext =>
+  path ? { key, path, value } : lazyRulesContext(key, pathNode!, value)
+
+// `{ "/**": globalRule, ...globalRule, ...node }` for a static `/**` rule object and a node rule that comes unchanged
+// from one static rule object (or no node rule): the merge depends on these two objects only, so it is built once and
+// shared by every node that resolves to it, instead of a fresh object per node.
+interface GlobalMerges {
+  none: object | undefined
+  readonly byNode: WeakMap<object, object>
+}
+const globalMerges = new WeakMap<object, GlobalMerges>()
+
+const mergeGlobal = (globalRule: object, node: object | undefined): object => {
+  let merges = globalMerges.get(globalRule)
+  if (merges === undefined) { globalMerges.set(globalRule, merges = { none: undefined, byNode: new WeakMap() }) }
+  if (node === undefined) { return merges.none ??= { "/**": globalRule, ...globalRule } }
+  let merged = merges.byNode.get(node)
+  if (merged === undefined) { merges.byNode.set(node, merged = { "/**": globalRule, ...globalRule, ...node }) }
+  return merged
+}
+
 // Implementation of `getNodeRules`: the crawler passes the path array of a shallow node, or `undefined` and the
 // parent-linked path node of a deep one. The two are separate parameters so that the common call stays monomorphic.
-// `prefixes` is `compilePrefixes(rules)` when the caller already has it: the crawler compiles the rules of a container
-// once for all its children, which keeps rule sets built per node out of the cache.
+// `compiled` is `compileRules(rules)` when the caller already has it: the crawler compiles the rules of a container
+// once for all its children, which keeps rule sets built per node out of the cache. Function rules are called inline
+// with one lazily created rules context, so that no closure is allocated per call.
 export const resolveNodeRules = <R extends {} = {}>(
   rules: CrawlRules<R> | undefined,
   key: string | number,
   path: JsonPath | undefined,
   pathNode: PathNode | undefined,
   value: unknown,
-  prefixes: string[] | undefined
+  compiled: CompiledRules | undefined
 ): CrawlRules<R> | undefined => {
   if (!rules) { return }
 
-  // the rules context is only needed by function rules, so it is created on first use
   let ctx: CrawlRulesContext | undefined
-  const resolve = (rule: CrawlChildType<R> | undefined): CrawlRules<R> | undefined =>
-    typeof rule === "function" ? rule(ctx ?? (ctx = (path ? { key, path, value } : lazyRulesContext(key, pathNode!, value)))) : rule
+  // false once a part of the result comes from a function rule or from a merge, which cannot be shared between nodes
+  let stable = true
 
   const globalRule = rules["/**"] as CrawlChildType<R> | undefined
-  const globalRules = resolve(globalRule)
-  const localRules = resolve(rules["/*"] as CrawlChildType<R> | undefined)
+  const globalRules = typeof globalRule === "function" ? globalRule(ctx = rulesContext(key, path, pathNode, value)) : globalRule
+
+  const localRule = rules["/*"] as CrawlChildType<R> | undefined
+  let localRules: CrawlRules<R> | undefined
+  if (typeof localRule === "function") {
+    stable = false
+    localRules = localRule(ctx ??= rulesContext(key, path, pathNode, value))
+  } else {
+    localRules = localRule
+  }
 
   // prefix rules apply to string keys only; a string key ending in "*" skips the exact lookup, because its exact rule
-  // key ("/x-*") is a prefix rule (or "/*", "/**") that the key already reaches as such. The exact lookup is one get
-  // instead of `in` + get: a rule key always starts with "/", so it never hits an Object.prototype member, and an
-  // explicit `undefined` rule resolves to nothing either way
+  // key ("/x-*") is a prefix rule (or "/*", "/**") that the key already reaches as such, and so does a rule set without
+  // exact path keys. The exact lookup is one get instead of `in` + get: a rule key always starts with "/", so it never
+  // hits an Object.prototype member, and an explicit `undefined` rule resolves to nothing either way
   let prefixRules: CrawlRules<R> | undefined
   let exactRule: CrawlChildType<R> | undefined
   if (typeof key === "string") {
-    prefixRules = resolve(matchCompiled(rules, prefixes ?? compilePrefixes(rules), key))
-    if (key.charCodeAt(key.length - 1) !== STAR) { exactRule = rules[`/${key}` as CrawlRulesKey] as CrawlChildType<R> | undefined }
+    const { prefixes, exact } = compiled ?? compileRules(rules)
+    if (prefixes.length) {
+      const prefixRule = matchCompiled(rules, prefixes, key)
+      if (typeof prefixRule === "function") {
+        stable = false
+        prefixRules = prefixRule(ctx ??= rulesContext(key, path, pathNode, value))
+      } else {
+        prefixRules = prefixRule
+      }
+    }
+    if (exact && key.charCodeAt(key.length - 1) !== STAR) { exactRule = rules[slashKey(key)] as CrawlChildType<R> | undefined }
   } else {
-    exactRule = rules[`/${key}` as CrawlRulesKey] as CrawlChildType<R> | undefined
+    exactRule = rules[slashKey(key)] as CrawlChildType<R> | undefined
   }
-  let node = exactRule !== undefined ? resolve(exactRule) : undefined
+
+  let node: CrawlRules<R> | undefined
+  if (typeof exactRule === "function") {
+    stable = false
+    node = exactRule(ctx ??= rulesContext(key, path, pathNode, value))
+  } else {
+    node = exactRule
+  }
 
   if (!node && !prefixRules && !localRules && globalRule === undefined) { return }
 
   if (prefixRules) {
-    node = node ? { ...prefixRules, ...node } : prefixRules
+    if (node) {
+      stable = false
+      node = { ...prefixRules, ...node }
+    } else {
+      node = prefixRules
+    }
   }
   if (localRules) {
-    node = node ? { ...localRules, ...node } : localRules
+    if (node) {
+      stable = false
+      node = { ...localRules, ...node }
+    } else {
+      node = localRules
+    }
   }
-  if (globalRule !== undefined) {
+  if (globalRule === undefined) { return node }
+  if (typeof globalRule === "function" || (node && !stable)) {
     return { "/**": globalRule, ...globalRules, ...node } as unknown as CrawlRules<R>
   }
-
-  return node
+  return mergeGlobal(globalRule, node) as CrawlRules<R>
 }

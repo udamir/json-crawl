@@ -5,7 +5,8 @@ import {
   type PathNode,
   childPath,
   childPathNode,
-  compilePrefixes,
+  type CompiledRules,
+  compileRules,
   isThenable,
   materializePath,
   releasePath,
@@ -23,7 +24,7 @@ interface Frame<T extends {}, R extends {}> {
   index: number                       // position of the next child
   state: T                            // state the children are crawled with
   rules: CrawlRules<R> | undefined    // rules the children are resolved from
-  prefixes: string[] | undefined      // compiled prefix rules of `rules` (objects only: array indexes never match a prefix)
+  compiled: CompiledRules | undefined // `compileRules(rules)` (objects only: array indexes never match a prefix)
   exitHooks: ExitHook[] | undefined   // exit hooks of the container, run LIFO once every child is done
 }
 
@@ -121,13 +122,13 @@ const nextChild = <T extends {}, R extends {}>(frame: Frame<T, R>, cursor: Curso
     cursor.node = undefined
     cursor.path = path
     // without rules there is nothing to resolve; the call (and the function context it allocates) is skipped
-    const rules = frame.rules === undefined ? undefined : resolveNodeRules(frame.rules, key, path, undefined, value, frame.prefixes)
+    const rules = frame.rules === undefined ? undefined : resolveNodeRules(frame.rules, key, path, undefined, value, frame.compiled)
     cursor.context = { value, path, key, state: frame.state, rules }
   } else {
     const node = childPathNode(parent, key)
     cursor.node = node
     cursor.path = undefined
-    const rules = frame.rules === undefined ? undefined : resolveNodeRules(frame.rules, key, undefined, node, value, frame.prefixes)
+    const rules = frame.rules === undefined ? undefined : resolveNodeRules(frame.rules, key, undefined, node, value, frame.compiled)
     cursor.context = createContext(value, node, key, frame.state, rules)
   }
   return true
@@ -158,8 +159,8 @@ const openFrame = <T extends {}, R extends {}>(frames: Frame<T, R>[], context: C
   const keys = isArray(data) ? undefined : Object.keys(data)
   const { rules } = context
   // compiled once for all the children of the container, so a rule set built for this node is scanned once
-  const prefixes = rules && keys && keys.length ? compilePrefixes(rules) : undefined
-  return { data, node, keys, length: keys ? keys.length : data.length, index: 0, state: context.state, rules, prefixes, exitHooks }
+  const compiled = rules && keys && keys.length ? compileRules(rules) : undefined
+  return { data, node, keys, length: keys ? keys.length : data.length, index: 0, state: context.state, rules, compiled, exitHooks }
 }
 
 // Pops exhausted frames (running their exit hooks) and moves the cursor to the next node to visit; its context is

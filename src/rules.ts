@@ -1,5 +1,5 @@
 import type { CrawlChildType, CrawlRules, CrawlRulesContext, CrawlRulesFunc, JsonPath } from "./types.ts"
-import { compilePrefixes, matchCompiled, resolveNodeRules } from "./internal.ts"
+import { compileRules, matchCompiled, resolveNodeRules } from "./internal.ts"
 
 /**
  * Returns the rule of the longest prefix rule (`"/<prefix>*"`) of `rules` that `key` starts with (unresolved: a rule
@@ -7,7 +7,7 @@ import { compilePrefixes, matchCompiled, resolveNodeRules } from "./internal.ts"
  * than `/**`.
  */
 export const matchPrefixRule = <R extends {} = {}>(rules: CrawlRules<R>, key: string): CrawlChildType<R> | undefined =>
-  matchCompiled(rules, compilePrefixes(rules), key)
+  matchCompiled(rules, compileRules(rules).prefixes, key)
 
 /**
  * Resolves the rules of a child node from the rules of its parent.

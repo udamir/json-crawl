@@ -277,7 +277,7 @@ With `circular: true` the crawl only cuts real cycles. An object shared by two b
 - Only own enumerable string keys are visited (no symbols, no inherited or non-enumerable properties). Array holes are skipped; `clone` keeps them and `equal` tells a hole from an explicit `undefined`.
 - `path` is a fresh array for every node and is never changed afterwards, so it is safe to keep. For nodes deeper than 128 levels it is built only when a hook reads it, which keeps very deep documents fast.
 - Clone and transform hooks get two extra state fields, `state.root` and `state.node` (the output being built). If such a hook returns its own state, keep them: `{ state: { ...state, mine: 1 } }`.
-- Rule objects returned to hooks may be shared between nodes; treat them as read-only.
+- Rule objects returned to hooks may be shared between nodes; treat them as read-only. Don't change a rule set after it has been used either: json-crawl caches what it learns about each rule set object.
 
 ## Performance
 

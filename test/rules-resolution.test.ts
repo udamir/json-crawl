@@ -464,3 +464,58 @@ describe("D5 prefix rules /<prefix>*", () => {
     ])
   })
 })
+
+describe("D6 rule resolution caches", () => {
+  it("D6.1 (characterization) under a static /** rule, nodes that resolve to the same static rules share one merged object", () => {
+    const exact = { tag: "e" }
+    const r = rules({ "/**": { g: 1 }, "/a": exact })
+    const first = getNodeRules(r, "a", ["a"], 1)
+    const second = getNodeRules(r, "a", ["p", "a"], 2)
+    expect(first).toEqual({ "/**": { g: 1 }, g: 1, tag: "e" })
+    expect(second).toBe(first)
+    // no node rule: one shared merge of /** alone, different from the one with a node rule
+    const other = getNodeRules(r, "b", ["b"], 1)
+    expect(other).toEqual({ "/**": { g: 1 }, g: 1 })
+    expect(getNodeRules(r, "c", ["c"], 1)).toBe(other)
+    expect(other).not.toBe(first)
+  })
+
+  it("D6.2 results built from function rules or from merges are fresh per node", () => {
+    const r = rules({ "/**": { g: 1 }, "/*": ({ key }: CrawlRulesContext) => ({ tag: String(key) }), "/a": { e: 1 } })
+    const a1 = getNodeRules(r, "a", ["a"], 1)!
+    const a2 = getNodeRules(r, "a", ["p", "a"], 1)!
+    expect(a1).toEqual({ "/**": { g: 1 }, g: 1, tag: "a", e: 1 })
+    expect(a2).toEqual(a1)
+    expect(a2).not.toBe(a1)
+    expect(getNodeRules(r, "b", ["b"], 1)).toMatchObject({ tag: "b" })
+    // a /** function is called per node as before
+    let calls = 0
+    const fn = rules({ "/**": () => { calls++; return { g: calls } } })
+    expect(getNodeRules(fn, "a", ["a"], 1)).toMatchObject({ g: 1 })
+    expect(getNodeRules(fn, "a", ["a"], 1)).toMatchObject({ g: 2 })
+  })
+
+  it("D6.3 rule sets with and without exact keys resolve the same way, also when large enough to be cached", () => {
+    const noExact = rules({ "/**": { g: 1 }, "/x-*": { tag: "ext" }, "/*": { l: 1 } })
+    expect(getNodeRules(noExact, "a", ["a"], 1)).toEqual({ "/**": { g: 1 }, g: 1, l: 1 })
+    expect(getNodeRules(noExact, "x-a", ["x-a"], 1)).toMatchObject({ tag: "ext", l: 1, g: 1 })
+    const large: Record<string, unknown> = { "/*": { l: 1 } }
+    for (let i = 0; i < 40; i++) { large[`/k${i}`] = { tag: `k${i}` } }
+    const big = rules(large)
+    for (let round = 0; round < 3; round++) {
+      expect(getNodeRules(big, "k7", ["k7"], 1)).toEqual({ l: 1, tag: "k7" })
+      expect(getNodeRules(big, "zz", ["zz"], 1)).toEqual({ l: 1 })
+    }
+    // array indexes still find exact rules
+    expect(getNodeRules(rules({ "/0": { tag: "first" }, "/x-*": {} }), 0, [0], 1)).toEqual({ tag: "first" })
+  })
+
+  it("D6.4 exact rules resolve correctly for more distinct keys than the bounded key cache holds", () => {
+    const r: Record<string, unknown> = {}
+    for (let i = 0; i < 10_000; i++) { r[`/key${i}`] = { i } }
+    const set = rules(r)
+    for (let i = 0; i < 10_000; i += 1) { expect(getNodeRules(set, `key${i}`, [`key${i}`], 1)).toEqual({ i }) }
+    expect(getNodeRules(set, "key17", ["key17"], 1)).toEqual({ i: 17 })
+  })
+})
+
