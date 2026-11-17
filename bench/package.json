@@ -1,0 +1,31 @@
+{
+  "name": "json-crawl-bench",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "json-crawl compared with popular npm libraries for traversal, deep clone, deep equality and transformation",
+  "scripts": {
+    "fixtures": "node fixtures/generate.mjs",
+    "bench": "node --expose-gc run.mjs",
+    "all": "pnpm --dir .. run build && pnpm run fixtures && pnpm run bench"
+  },
+  "devDependencies": {
+    "clone": "^2.1.2",
+    "deep-equal": "^2.2.3",
+    "deep-for-each": "^3.0.0",
+    "dequal": "^2.0.3",
+    "fast-deep-equal": "^3.1.3",
+    "fast-equals": "^6.2.2",
+    "json-crawl-0.5.3": "npm:json-crawl@0.5.3",
+    "json-schema-traverse": "^1.0.0",
+    "klona": "^2.0.6",
+    "lodash.clonedeep": "^4.5.0",
+    "lodash.isequal": "^4.5.0",
+    "object-traversal": "^1.0.1",
+    "rfdc": "^1.4.1",
+    "traverse": "^0.6.14",
+    "tree-crawl": "^1.2.2",
+    "yaml": "^2.8.0"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

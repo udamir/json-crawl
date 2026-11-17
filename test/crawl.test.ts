@@ -12,7 +12,7 @@ describe('crawl test', () => {
     }
 
     let counter = 0
-    syncCrawl(source, (value) => { 
+    syncCrawl(source, (_value) => {
       counter++
     })
 
