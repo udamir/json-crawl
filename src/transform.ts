@@ -1,8 +1,8 @@
-import type { CloneHook, CloneState, CrawlHook, CrawlParams } from "./types.ts"
+import type { CloneHook, CloneState, CrawlContext, CrawlHookResponse, CrawlParams } from "./types.ts"
 import { JSON_ROOT_KEY, REMOVE } from "./constants.ts"
-import { setOwn } from "./internal.ts"
+import { type EngineParams, normalizeHooks, runCrawl, setOwn } from "./internal.ts"
+import { mergeRules } from "./rules.ts"
 import { isArray, isObject } from "./utils.ts"
-import { crawl } from "./crawl.ts"
 
 // internal state of the transform: `pending` collects the indexes removed from the array `node`, compacted on exit
 type TransformState<T extends {}> = CloneState<T> & { pending?: number[] }
@@ -17,6 +17,40 @@ const compactArray = (array: unknown[], childState: { pending?: number[] }) => (
   }
 }
 
+const DONE = { done: true }
+
+// The write step of a transform, run by the engine after the user hooks: writes a replaced value into its parent,
+// removes a node returned as REMOVE (object keys at once, array elements when the array is left), and makes a container
+// the target of its children.
+const transformStep = <T extends {}, R extends {}>(
+  { value, key, state }: CrawlContext<TransformState<T>, R>
+): CrawlHookResponse<TransformState<T>, R> | void => {
+  const k = key === undefined ? JSON_ROOT_KEY : key
+  const parent = state.node
+
+  if (value === REMOVE) {
+    if (isArray(parent)) {
+      (state.pending ??= []).push(k as number)
+    } else {
+      delete parent[k]
+    }
+    return DONE
+  }
+
+  if (parent[k] !== value) {
+    setOwn(parent, k, value)
+  }
+
+  if (!isObject(value)) { return }
+
+  // children are written into the current (possibly replaced) container
+  const childState: TransformState<T> = { ...state, node: value, pending: undefined }
+  if (!isArray(value)) {
+    return { state: childState }
+  }
+  return { state: childState, exitHook: compactArray(value, childState) }
+}
+
 /**
  * Transforms a document in place. Hooks return `{ value }` to replace the current node in its parent (at the root the
  * replacement becomes the result), `{ value: REMOVE }` to delete it (object keys are deleted, array elements are spliced
@@ -29,43 +63,14 @@ export const transform = async <T extends {}, R extends {} = {}>(
   hooks: CloneHook<T, R> | CloneHook<T, R>[] = [],
   params: CrawlParams<T, R> = {}
 ): Promise<unknown> => {
-  hooks = isArray(hooks) ? hooks : [hooks]
   const root: { [JSON_ROOT_KEY]: unknown } = { [JSON_ROOT_KEY]: data }
-
-  const transformHook: CrawlHook<TransformState<T>, R> = ({ value, key, state }) => {
-    const k = key === undefined ? JSON_ROOT_KEY : key
-    const parent = state.node
-
-    if (value === REMOVE) {
-      if (isArray(parent)) {
-        (state.pending ??= []).push(k as number)
-      } else {
-        delete parent[k]
-      }
-      return { done: true }
-    }
-
-    if (parent[k] !== value) {
-      setOwn(parent, k, value)
-    }
-
-    if (!isObject(value)) { return }
-
-    // children are written into the current (possibly replaced) container
-    const childState: TransformState<T> = { ...state, node: value, pending: undefined }
-    if (!isArray(value)) {
-      return { state: childState }
-    }
-    return { state: childState, exitHook: compactArray(value, childState) }
-  }
-
-  const _params: CrawlParams<TransformState<T>, R> = {
+  const _params: EngineParams<TransformState<T>, R> = {
     state: { ...(params.state ?? ({} as T)), root, node: root },
-    ...(params.rules ? { rules: params.rules } : {}),
-    ...(params.circular ? { circular: true } : {}),
+    rules: isArray(params.rules) ? mergeRules(params.rules) : params.rules,
+    circular: params.circular,
   }
 
-  await crawl<TransformState<T>, R>(data, [...(hooks as CrawlHook<TransformState<T>, R>[]), transformHook], _params)
+  await runCrawl<TransformState<T>, R>(data, normalizeHooks(hooks), _params, transformStep<T, R>)
 
   return root[JSON_ROOT_KEY]
 }

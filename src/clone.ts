@@ -1,13 +1,8 @@
-import type { CloneHook, CloneParams, CloneState, CrawlParams, SyncCloneHook } from "./types.ts"
-import { crawl, syncCrawl } from "./crawl.ts"
+import type { CloneHook, CloneParams, CloneState, CrawlHookResponse, SyncCloneHook } from "./types.ts"
 import { JSON_ROOT_KEY } from "./constants.ts"
-import { setOwn } from "./internal.ts"
-import { isObject } from "./utils.ts"
-
-interface CloneHooks<T extends {}, R extends {}> {
-  pre: SyncCloneHook<T, R>[]    // run before the user hooks
-  post: SyncCloneHook<T, R>     // run after the user hooks: writes the node into the clone
-}
+import { type EngineParams, type PostStep, normalizeHooks, runCrawl, runSyncCrawl, setOwn } from "./internal.ts"
+import { mergeRules } from "./rules.ts"
+import { isArray, isObject } from "./utils.ts"
 
 // empty container of the same kind; arrays keep their length so that holes, trailing ones included, stay holes
 const newContainer = (value: object): object => {
@@ -20,52 +15,35 @@ const newContainer = (value: object): object => {
 // references are tracked unless `circular: false` declares the input a tree
 const tracksReferences = (params: CloneParams<{}, {}>): boolean => params.circular !== false
 
-const createCloneHooks = <T extends {}, R extends {} = {}>(tracked: boolean): CloneHooks<T, R> => {
-  if (!tracked) {
-    // no cycle or shared-reference tracking: every container is copied, cyclic input never terminates
-    const treeCloneHook: SyncCloneHook<T, R> = ({ value, key, state }) => {
-      const k = key === undefined ? JSON_ROOT_KEY : key
-      if (!isObject(value)) {
-        setOwn(state.node, k, value)
-        return
-      }
-      const copy = newContainer(value)
-      setOwn(state.node, k, copy)
-      return { state: { ...state, node: copy } }
-    }
-    return { pre: [], post: treeCloneHook }
-  }
+const DONE: CrawlHookResponse<{}, {}> = { done: true }
 
-  // the original (pre-hook) value of the node identifies shared references and cycles; the clone made for it is reused
-  const nodes = new WeakMap<object, object>()
-  let originalValue: unknown = undefined
-
-  const preHook: SyncCloneHook<T, R> = ({ value }) => {
-    originalValue = value
-  }
-
-  const cloneHook: SyncCloneHook<T, R> = ({ value, key, state }) => {
+// The write step of a clone, run by the engine after the user hooks: it writes the (possibly replaced) value into the
+// copy under construction and, for a container, makes the copy the target of the children. With `tracked`, the node's
+// original value identifies shared references and cycles: the copy made for it is reused and not descended again.
+const cloneStep = <T extends {}, R extends {}>(tracked: boolean): PostStep<CloneState<T>, R> => {
+  const nodes = tracked ? new WeakMap<object, object>() : undefined
+  return ({ value, key, state }, original) => {
     const k = key === undefined ? JSON_ROOT_KEY : key
 
-    if (!isObject(value) || !isObject(originalValue)) {
+    if (!isObject(value) || (nodes !== undefined && !isObject(original))) {
       setOwn(state.node, k, value)
       return
     }
 
-    const existing = nodes.get(originalValue)
-    if (existing) {
-      setOwn(state.node, k, existing)
-      return { done: true }
+    if (nodes !== undefined) {
+      const existing = nodes.get(original as object)
+      if (existing) {
+        setOwn(state.node, k, existing)
+        return DONE as CrawlHookResponse<CloneState<T>, R>
+      }
     }
 
     const copy = newContainer(value)
     setOwn(state.node, k, copy)
-    nodes.set(originalValue, copy)
+    nodes?.set(original as object, copy)
 
     return { state: { ...state, node: copy } }
   }
-
-  return { pre: [preHook], post: cloneHook }
 }
 
 // Copy without hooks and rules: there is nothing to observe, so the crawl machinery (contexts, paths, frames, hook
@@ -114,13 +92,13 @@ const plainClone = (data: unknown, tracked: boolean): unknown => {
   return rootCopy
 }
 
-const hasHooks = (hooks: unknown[]): boolean => hooks.some((hook) => typeof hook === "function")
-
-const cloneParams = <T extends {}, R extends {}>(params: CloneParams<T, R>): [{ [JSON_ROOT_KEY]: any }, CrawlParams<CloneState<T>, R>] => {
+const cloneParams = <T extends {}, R extends {}>(params: CloneParams<T, R>): [{ [JSON_ROOT_KEY]: any }, EngineParams<CloneState<T>, R>] => {
   const root: { [JSON_ROOT_KEY]: any } = { [JSON_ROOT_KEY]: undefined }
-  const _params: CrawlParams<CloneState<T>, R> = {
+  const _params: EngineParams<CloneState<T>, R> = {
     state: { ...(params.state ?? ({} as T)), root, node: root },
-    ...(params.rules ? { rules: params.rules } : {}),
+    rules: isArray(params.rules) ? mergeRules(params.rules) : params.rules,
+    // the clone tracks references itself; the engine's cycle guard is not used
+    circular: undefined,
   }
   return [root, _params]
 }
@@ -130,12 +108,11 @@ export const clone = async <T extends {}, R extends {} = {}>(
   hooks: CloneHook<T, R> | CloneHook<T, R>[] | SyncCloneHook<T, R> | SyncCloneHook<T, R>[] = [],
   params: CloneParams<T, R> = {}
 ): Promise<unknown> => {
-  hooks = Array.isArray(hooks) ? hooks : [hooks]
-  if (!params.rules && !hasHooks(hooks)) { return plainClone(data, tracksReferences(params)) }
+  const _hooks = normalizeHooks<CloneHook<T, R> | SyncCloneHook<T, R>>(hooks)
+  if (!params.rules && !_hooks.length) { return plainClone(data, tracksReferences(params)) }
   const [root, _params] = cloneParams(params)
-  const { pre, post } = createCloneHooks<T, R>(tracksReferences(params))
 
-  await crawl<CloneState<T>, R>(data, [...pre, ...hooks, post], _params)
+  await runCrawl<CloneState<T>, R>(data, _hooks, _params, cloneStep<T, R>(tracksReferences(params)))
 
   return root[JSON_ROOT_KEY]
 }
@@ -145,12 +122,11 @@ export const syncClone = <T extends {}, R extends {} = {}>(
   hooks: SyncCloneHook<T, R> | SyncCloneHook<T, R>[] = [],
   params: CloneParams<T, R> = {}
 ): unknown => {
-  hooks = Array.isArray(hooks) ? hooks : [hooks]
-  if (!params.rules && !hasHooks(hooks)) { return plainClone(data, tracksReferences(params)) }
+  const _hooks = normalizeHooks(hooks)
+  if (!params.rules && !_hooks.length) { return plainClone(data, tracksReferences(params)) }
   const [root, _params] = cloneParams(params)
-  const { pre, post } = createCloneHooks<T, R>(tracksReferences(params))
 
-  syncCrawl<CloneState<T>, R>(data, [...pre, ...hooks, post], _params)
+  runSyncCrawl<CloneState<T>, R>(data, _hooks, _params, cloneStep<T, R>(tracksReferences(params)))
 
   return root[JSON_ROOT_KEY]
 }
