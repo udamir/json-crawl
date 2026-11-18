@@ -11,7 +11,7 @@ describe('clone test', () => {
       }
     }
 
-    const data = syncClone(source)
+    const data = syncClone(source, [], { circular: false })
 
     expect(data).toEqual(source)
     expect(data === source).toEqual(false)

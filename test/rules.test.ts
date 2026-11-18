@@ -1,4 +1,4 @@
-import { CrawlRules, SyncCloneHook, syncClone } from "../src"
+import { type CrawlRules, type SyncCloneHook, syncClone } from "../src"
 
 interface TestState {
   counter: number
@@ -10,7 +10,7 @@ type TestRules = CrawlRules<TestRule>
 describe('rules test', () => {
   it('should execute function for each node base on rules', () => {
     const testRules: TestRules = {
-      $: (v, s) => v.test = "test",
+      $: (v, _s) => v.test = "test",
       "/address": {
         $: (v, s) => {
           for (const key of Object.keys(v)) {
@@ -112,7 +112,7 @@ describe('rules test', () => {
       if (!rules) { return }
       if ("$$" in rules) {
         const m = rules["$$"]!
-        return { value: <number>value * m }
+        return { value: (value as number) * m }
       }
       if ("$" in rules && rules.$?.(value, state)) {
         return { value: (value as string).toUpperCase() }
