@@ -55,6 +55,18 @@ Overall, baseline → final: crawl -27%, clone -39%, clone tree mode -49%, clone
 
 Contract consequences that were documented: rule objects handed to hooks may be shared between nodes under `/**`; rule sets must not be mutated after first use (several caches assume it); non-enumerable exact rule keys are no longer found; the build target became ES2022.
 
+### Second round (after a peer analysis)
+
+A deep analysis of the libraries that were faster in some cells (tree-crawl, klona/json, rfdc with circles, object-traversal, the JSON reviver) produced three contract-preserving proposals; each was ported and measured per case in fresh processes against the previous build:
+
+| change | prototype | ported | kept |
+|---|---|---|---|
+| frames as class instances instead of object literals | crawl -9%, -46% after a deep document | crawl +16..+20%, circular +8..+12%, prefix rules +13%, no gain after a deep document (A/A ±2%) | no |
+| `new Array(length)` for clone array copies | tree clone -8..-11% | tree clone -11..-13%, others within noise | yes |
+| write step returns the children's state instead of `{ state }` | -45 B/node, -1..-5% | -46 B/node, transform -3..-5%, clone with a hook -2..-5% | yes |
+
+The analysis also found that the benchmark itself was biased by order: tree-crawl measured 14-17 ms only after another library had walked the document's keys (V8's enum cache), 24 ms in a fresh process; and OpenAPI crawls measured after the deep fixture were 20-36% slower. The harness now runs every cell in its own process. Why peers were faster: tree-crawl gives the visitor neither keys nor paths (path copy 37%, hook call 17%, context 8% of json-crawl's time); klona/json preallocates arrays (adopted); rfdc with circles tracks only ancestors, copies shared references twice and overflows on self-containing arrays (json-crawl's `WeakMap` costs ≈175 ns per container); object-traversal's string paths are ropes (see the string-path entry in SKILL.md).
+
 ## 4. Rejected ideas
 
 | idea | result |
@@ -74,6 +86,11 @@ Contract consequences that were documented: rule objects handed to hooks may be 
 | mutating contexts in place | rejected on semantics |
 | path accessor on the prototype instead of own | deep crawl -88% but breaks own-enumerable `path` (spread, `Object.keys`) |
 | caching compiled rule sets for every object, including per-node ones | +16% on crawls whose rule sets are built per node (WeakMap ≈150 ns per short-lived entry) |
+| frames as class instances (second round) | +8..+20% on traversals; the constructor was inlined, a literal from a boilerplate is still cheaper |
+| a pool of reused frame objects | +10% (pooled frames live long enough to be promoted, so every store pays the write barrier) |
+| no path node for shallow containers | -4% on openapi, +39% on deep-5k |
+| building the context only when a later hook needs it | 64 B/node less, 0% time |
+| string paths built as ropes | almost free while unused; when used, slower than arrays on ordinary documents (37.9 vs 17.4 ms) |
 
 ## 5. Final standing against other libraries
 
