@@ -305,8 +305,12 @@ export interface EngineParams<T extends {}, R extends {}> {
 }
 
 // Internal final step of a node (the write of clone and transform), called after the user hooks with the node's
-// original value; its response is handled like a hook response (exitHook, done, value/state/rules).
-export type PostStep<T extends {}, R extends {}> = (context: CrawlContext<T, R>, original: unknown) => CrawlHookResponse<T, R> | void
+// original value. It returns the state for the node's children, POST_DONE to skip the children, or undefined to keep
+// the current state; an exit hook for the node is handed over through `sink`. Returning the state itself (instead of a
+// `{ state }` response) saves a response object and a rebuilt context per container.
+export const POST_DONE: object = { done: true }
+export interface PostSink { exitHook: ExitHook | undefined }
+export type PostStep<T extends {}, R extends {}> = (context: CrawlContext<T, R>, original: unknown, sink: PostSink) => T | typeof POST_DONE | undefined
 
 // One open container on the traversal stack.
 interface Frame<T extends {}, R extends {}> {
@@ -443,7 +447,7 @@ const runExitHooks = (exitHooks: ExitHook[] | undefined): void => {
 }
 
 // Enters a container: its own enumerable keys (objects) or its length (arrays) are captured once.
-const openFrame = <T extends {}, R extends {}>(frames: Frame<T, R>[], context: CrawlContext<T, R>, cursor: Cursor<T, R>, exitHooks: ExitHook[] | undefined): Frame<T, R> => {
+const openFrame = <T extends {}, R extends {}>(frames: Frame<T, R>[], context: CrawlContext<T, R>, cursor: Cursor<T, R>, exitHooks: ExitHook[] | undefined, state: T): Frame<T, R> => {
   // the root and deep nodes already have a path node; a shallow node gets one now, from its parent, the top frame
   const node = cursor.node ?? childPathNode(frames[frames.length - 1].node, context.key!, cursor.path)
   const data = context.value as Record<string | number, any>
@@ -451,7 +455,7 @@ const openFrame = <T extends {}, R extends {}>(frames: Frame<T, R>[], context: C
   const { rules } = context
   // compiled once for all the children of the container, so a rule set built for this node is scanned once
   const compiled = rules && keys && keys.length ? compileRules(rules) : undefined
-  return { data, node, keys, length: keys ? keys.length : data.length, index: 0, state: context.state, rules, compiled, exitHooks }
+  return { data, node, keys, length: keys ? keys.length : data.length, index: 0, state, rules, compiled, exitHooks }
 }
 
 // Pops exhausted frames (running their exit hooks) and moves the cursor to the next node to visit; its context is
@@ -488,6 +492,7 @@ export const runCrawl = async <T extends {}, R extends {} = {}>(
   const root = rootPathNode()
   const cursor: Cursor<T, R> = { context: createContext(data, root, undefined, params.state, rules), node: root, path: undefined }
   const open = params.circular ? new Set<object>() : undefined
+  const sink: PostSink = { exitHook: undefined }
 
   while (cursor.context) {
     let context: CrawlContext<T, R> = cursor.context
@@ -510,21 +515,23 @@ export const runCrawl = async <T extends {}, R extends {} = {}>(
 
     // the internal final step (clone, transform) runs from its own call site, after the user hooks, unless they stopped
     // the descent; it receives the node's original value (cursor.context is the context before any hook ran)
+    let childState = context.state
     if (post !== undefined && descend) {
-      const response = post(context, cursor.context.value)
-      if (response) {
-        if (response.exitHook) { (exitHooks ??= []).push(response.exitHook) }
-        if (response.done) {
-          descend = false
-        } else if ("value" in response || "state" in response || "rules" in response) {
-          context = applyResponse(context, cursor, response)
-        }
+      const result = post(context, cursor.context.value, sink)
+      if (result === POST_DONE) {
+        descend = false
+      } else if (result !== undefined) {
+        childState = result as T
+      }
+      if (sink.exitHook !== undefined) {
+        (exitHooks ??= []).push(sink.exitHook)
+        sink.exitHook = undefined
       }
     }
 
     if (descend && isObject(context.value) && !isOpenCycle(open, context.value)) {
       // only the innermost open container keeps its cached path (see the paths section of internal.ts)
-      const frame = openFrame(frames, context, cursor, exitHooks)
+      const frame = openFrame(frames, context, cursor, exitHooks, childState)
       if (frames.length) { releasePath(frames[frames.length - 1].node) }
       frames.push(frame)
     } else {
@@ -547,6 +554,7 @@ export const runSyncCrawl = <T extends {}, R extends {} = {}>(
   const root = rootPathNode()
   const cursor: Cursor<T, R> = { context: createContext(data, root, undefined, params.state, rules), node: root, path: undefined }
   const open = params.circular ? new Set<object>() : undefined
+  const sink: PostSink = { exitHook: undefined }
 
   while (cursor.context) {
     let context: CrawlContext<T, R> = cursor.context
@@ -570,21 +578,23 @@ export const runSyncCrawl = <T extends {}, R extends {} = {}>(
 
     // the internal final step (clone, transform) runs from its own call site, after the user hooks, unless they stopped
     // the descent; it receives the node's original value (cursor.context is the context before any hook ran)
+    let childState = context.state
     if (post !== undefined && descend) {
-      const response = post(context, cursor.context.value)
-      if (response) {
-        if (response.exitHook) { (exitHooks ??= []).push(response.exitHook) }
-        if (response.done) {
-          descend = false
-        } else if ("value" in response || "state" in response || "rules" in response) {
-          context = applyResponse(context, cursor, response)
-        }
+      const result = post(context, cursor.context.value, sink)
+      if (result === POST_DONE) {
+        descend = false
+      } else if (result !== undefined) {
+        childState = result as T
+      }
+      if (sink.exitHook !== undefined) {
+        (exitHooks ??= []).push(sink.exitHook)
+        sink.exitHook = undefined
       }
     }
 
     if (descend && isObject(context.value) && !isOpenCycle(open, context.value)) {
       // only the innermost open container keeps its cached path (see the paths section of internal.ts)
-      const frame = openFrame(frames, context, cursor, exitHooks)
+      const frame = openFrame(frames, context, cursor, exitHooks, childState)
       if (frames.length) { releasePath(frames[frames.length - 1].node) }
       frames.push(frame)
     } else {

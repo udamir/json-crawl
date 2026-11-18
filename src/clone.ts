@@ -1,6 +1,6 @@
-import type { CloneHook, CloneParams, CloneState, CrawlHookResponse, SyncCloneHook } from "./types.ts"
+import type { CloneHook, CloneParams, CloneState, SyncCloneHook } from "./types.ts"
 import { JSON_ROOT_KEY } from "./constants.ts"
-import { type EngineParams, type PostStep, normalizeHooks, runCrawl, runSyncCrawl, setOwn } from "./internal.ts"
+import { type EngineParams, POST_DONE, type PostStep, normalizeHooks, runCrawl, runSyncCrawl, setOwn } from "./internal.ts"
 import { mergeRules } from "./rules.ts"
 import { isArray, isObject } from "./utils.ts"
 
@@ -10,8 +10,6 @@ const newContainer = (value: object): object => (Array.isArray(value) ? new Arra
 
 // references are tracked unless `circular: false` declares the input a tree
 const tracksReferences = (params: CloneParams<{}, {}>): boolean => params.circular !== false
-
-const DONE: CrawlHookResponse<{}, {}> = { done: true }
 
 // The write step of a clone, run by the engine after the user hooks: it writes the (possibly replaced) value into the
 // copy under construction and, for a container, makes the copy the target of the children. With `tracked`, the node's
@@ -30,7 +28,7 @@ const cloneStep = <T extends {}, R extends {}>(tracked: boolean): PostStep<Clone
       const existing = nodes.get(original as object)
       if (existing) {
         setOwn(state.node, k, existing)
-        return DONE as CrawlHookResponse<CloneState<T>, R>
+        return POST_DONE
       }
     }
 
@@ -38,7 +36,7 @@ const cloneStep = <T extends {}, R extends {}>(tracked: boolean): PostStep<Clone
     setOwn(state.node, k, copy)
     nodes?.set(original as object, copy)
 
-    return { state: { ...state, node: copy } }
+    return { ...state, node: copy }
   }
 }
 

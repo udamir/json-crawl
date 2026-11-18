@@ -1,6 +1,6 @@
-import type { CloneHook, CloneState, CrawlContext, CrawlHookResponse, CrawlParams } from "./types.ts"
+import type { CloneHook, CloneState, CrawlContext, CrawlParams } from "./types.ts"
 import { JSON_ROOT_KEY, REMOVE } from "./constants.ts"
-import { type EngineParams, normalizeHooks, runCrawl, setOwn } from "./internal.ts"
+import { type EngineParams, POST_DONE, type PostSink, normalizeHooks, runCrawl, setOwn } from "./internal.ts"
 import { mergeRules } from "./rules.ts"
 import { isArray, isObject } from "./utils.ts"
 
@@ -17,14 +17,14 @@ const compactArray = (array: unknown[], childState: { pending?: number[] }) => (
   }
 }
 
-const DONE = { done: true }
-
 // The write step of a transform, run by the engine after the user hooks: writes a replaced value into its parent,
 // removes a node returned as REMOVE (object keys at once, array elements when the array is left), and makes a container
 // the target of its children.
 const transformStep = <T extends {}, R extends {}>(
-  { value, key, state }: CrawlContext<TransformState<T>, R>
-): CrawlHookResponse<TransformState<T>, R> | void => {
+  { value, key, state }: CrawlContext<TransformState<T>, R>,
+  _original: unknown,
+  sink: PostSink
+): TransformState<T> | typeof POST_DONE | undefined => {
   const k = key === undefined ? JSON_ROOT_KEY : key
   const parent = state.node
 
@@ -34,7 +34,7 @@ const transformStep = <T extends {}, R extends {}>(
     } else {
       delete parent[k]
     }
-    return DONE
+    return POST_DONE
   }
 
   if (parent[k] !== value) {
@@ -45,10 +45,8 @@ const transformStep = <T extends {}, R extends {}>(
 
   // children are written into the current (possibly replaced) container
   const childState: TransformState<T> = { ...state, node: value, pending: undefined }
-  if (!isArray(value)) {
-    return { state: childState }
-  }
-  return { state: childState, exitHook: compactArray(value, childState) }
+  if (isArray(value)) { sink.exitHook = compactArray(value, childState) }
+  return childState
 }
 
 /**
