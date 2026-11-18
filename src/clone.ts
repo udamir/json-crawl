@@ -4,13 +4,9 @@ import { type EngineParams, type PostStep, normalizeHooks, runCrawl, runSyncCraw
 import { mergeRules } from "./rules.ts"
 import { isArray, isObject } from "./utils.ts"
 
-// empty container of the same kind; arrays keep their length so that holes, trailing ones included, stay holes
-const newContainer = (value: object): object => {
-  if (!Array.isArray(value)) { return {} }
-  const copy: unknown[] = []
-  copy.length = value.length
-  return copy
-}
+// empty container of the same kind; arrays are preallocated with the source length (faster than growing `[]`), so
+// holes, trailing ones included, stay holes
+const newContainer = (value: object): object => (Array.isArray(value) ? new Array(value.length) : {})
 
 // references are tracked unless `circular: false` declares the input a tree
 const tracksReferences = (params: CloneParams<{}, {}>): boolean => params.circular !== false
