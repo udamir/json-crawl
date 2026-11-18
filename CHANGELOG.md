@@ -5,7 +5,7 @@
 ### Highlights
 
 - **Prefix rules.** A rule key ending in `*` matches every key that starts with the text before it: `"/x-*": extensionRule`, `"/x-internal-*": privateRule` (the longest prefix wins). Order of precedence: exact key > longest prefix > `/*` > `/**`.
-- **Much faster.** On a 5.5 MB OpenAPI document compared with 0.5.3: `syncCrawl` and async `crawl` 7× faster, `syncClone` 6× (10× with `circular: false`), `equal` 9×, crawls with rules 3×, crawls with prefix rules 4×. `equal` on a 100 000-element array takes 0.5 ms instead of 22 s.
+- **Much faster.** On a 5.5 MB OpenAPI document compared with 0.5.3: `syncCrawl` 8× faster, async `crawl` 7×, `syncClone` 5×, cloning with a hook 3.5×, crawls with rules 3×, crawls with prefix rules 4×; `equal` is 9× faster even though it now also handles cycles. `equal` on a 100 000-element array takes 0.5 ms instead of 22 s.
 - **Very deep documents.** Crawling, cloning and transforming work on documents nested 100 000 levels deep and take time linear in the document size, as long as hooks do not read `path` at every node (a path is built only when it is read).
 - **`transform` works as documented.** Replacements and removals are written into the document at every depth (previously only the root could change), and nodes are removed with the new `REMOVE` value.
 - **`equal` is correct and fast.** Fixed wrong results for objects compared with arrays and for type mismatches, `null` no longer throws, cyclic documents are supported without slowing down ordinary documents, and large arrays are compared in linear time.

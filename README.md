@@ -281,21 +281,32 @@ With `circular: true` the crawl only cuts real cycles. An object shared by two b
 
 ## Performance
 
-json-crawl is written for large documents such as multi-megabyte OpenAPI specs. Minimum time in ms on a 5.5 MB OpenAPI document (317 649 nodes), Node 26, lower is better:
+json-crawl is written for large documents such as multi-megabyte OpenAPI specs. Minimum time in ms on a 5.5 MB OpenAPI document (317 649 nodes), Node 26, lower is better. Handling cyclic input means tracking every visited object, so libraries are only compared with libraries that handle cycles the same way: json-crawl's default (or `circular: true` for walking) against cycle-safe libraries, and its tree modes against libraries that only accept trees.
 
-| task | json-crawl 1.0.0 | json-crawl 0.5.3 | popular alternatives |
+**Libraries that handle cycles**
+
+| task | json-crawl 1.0.0 | json-crawl 0.5.3 | alternatives |
 |---|---|---|---|
-| walk every node | 28 | 205 | object-traversal 43, deep-for-each 55, traverse 161 |
-| walk every node, async | 31 | 227 | (none offer it) |
-| deep clone | 64 (37 with `circular: false`) | 379 | klona 41, rfdc 41, lodash.clonedeep 108, structuredClone 160 |
-| clone and double every number | 144 | 433 | JSON.parse reviver 138, rfdc + traverse 224, traverse map 627 |
-| deep equality | 31 | 265 | fast-equals 34, fast-deep-equal 38, util.isDeepStrictEqual 75, lodash.isequal 103 |
-| crawl with an OpenAPI rule tree | 94 | 260 | (json-crawl only) |
+| walk every node (`circular: true`) | 36 | (no cycle guard) | object-traversal 46, traverse 163 |
+| deep clone | 66 | 347 | rfdc with `circles` 44, lodash.clonedeep 110, structuredClone 129 |
+| clone and double every number | 108 | 382 | rfdc with `circles` + traverse 226 |
+| deep equality | 30 | (no cycle support) | util.isDeepStrictEqual 74, fast-equals `circularDeepEqual` 75, lodash.isequal 101 |
 
-- Version 1.0.0 is 3–10× faster than 0.5.3, and `equal` on a 100 000-element array takes 0.5 ms instead of 22 s.
-- Walking, comparing, and transforming while copying are on par with the fastest single-purpose libraries, even though every json-crawl hook gets the key, the path, a state and the matched rules.
-- A plain deep clone keeps cycles and shared references by default and is about 1.5× slower than klona or rfdc, which don't; with `circular: false` (tree input) it is as fast as they are.
-- Nothing overflows the stack: on a chain of 5 000 nested objects, traverse, deep-for-each, rfdc, lodash.clonedeep, structuredClone, fast-equals, lodash.isequal and util.isDeepStrictEqual throw `RangeError`, json-crawl does not.
+**Tree input only (no cycle support)**
+
+| task | json-crawl 1.0.0 | json-crawl 0.5.3 | alternatives |
+|---|---|---|---|
+| walk every node | 26 | 205 | tree-crawl 17 (no keys or paths), json-schema-traverse 30 (sub-schemas only), object-traversal 45, deep-for-each 57 |
+| walk every node, async | 31 | 229 | (none offer it) |
+| deep clone (`circular: false`) | 40 | (no tree mode) | klona/json 35, klona 40, rfdc 42, JSON round trip 54 |
+| clone and double every number (`circular: false`) | 73 | (no tree mode) | JSON.parse reviver 131, rfdc + traverse 222, traverse map 614 |
+| deep equality | (always cycle-safe) | 269 | fast-equals 33, fast-deep-equal 36, dequal 41 |
+| crawl with an OpenAPI rule tree | 94 | 267 | (json-crawl only) |
+
+- Version 1.0.0 is 3–8× faster than 0.5.3 in every comparable task, and `equal` on a 100 000-element array takes 0.5 ms instead of 22 s.
+- Among libraries that handle cycles, json-crawl is the fastest at walking, transforming while copying and comparing (equality is 2.5× faster than the next one); rfdc with `circles` clones faster.
+- On tree input, only tree-crawl walks faster, and it gives the visitor neither keys nor paths; cloning is on par with klona and rfdc and slightly behind klona/json; transforming while copying is the fastest.
+- Nothing overflows the stack: on a chain of 5 000 nested objects, traverse, deep-for-each, json-schema-traverse, rfdc, klona/json, lodash.clonedeep, clone, structuredClone, fast-equals, lodash.isequal and util.isDeepStrictEqual throw `RangeError` (deep-equal fails with a `TypeError`); json-crawl handles it in every mode.
 
 Full tables, more fixtures and the method: [bench/README.md](bench/README.md).
 

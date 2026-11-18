@@ -95,7 +95,7 @@ export const fmtMs = (ms) => (ms === undefined || ms === null ? "" : ms.toFixed(
 export const runCases = async (cases, log = console.log) => {
   const out = []
   for (const c of cases) {
-    const row = { case: c.case, fixture: c.fixture, library: c.library, note: c.note }
+    const row = { case: c.case, fixture: c.fixture, library: c.library, note: c.note, cycles: c.cycles }
     try {
       if (c.check) { await c.check() }
       const m = await measure(c.fn, { setup: c.setup })
