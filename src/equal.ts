@@ -5,45 +5,47 @@ const sameValue = (x: unknown, y: unknown): boolean => x === y || (x !== x && y 
 
 const isContainer = (x: unknown): x is Record<string | number, unknown> => typeof x === "object" && x !== null
 
-// Pairs above this depth are not recorded. A cycle produces unbounded depth, so it is still caught (after being
-// unrolled this many levels, with the same verdict), while ordinary documents, which are shallow, skip the bookkeeping.
-const UNTRACKED_DEPTH = 32
+// Records that x is being compared with y. The first partner of x is kept in `pairs`; further distinct partners (x
+// shared by objects that are compared with different objects) go into a set in `more`, created on first need.
+interface Visited {
+  readonly pairs: Map<object, object>
+  more: Map<object, Set<object>> | undefined
+}
+const recordPair = (visited: Visited, x: object, y: object): void => {
+  if (!visited.pairs.has(x)) { visited.pairs.set(x, y); return }
+  let partners = visited.more?.get(x)
+  if (!partners) { (visited.more ??= new Map()).set(x, (partners = new Set())) }
+  partners.add(y)
+}
+const wasVisited = (visited: Visited, x: object, y: object): boolean => {
+  const first = visited.pairs.get(x)
+  return first !== undefined && (first === y || visited.more?.get(x)?.has(y) === true)
+}
 
 /**
  * Deep equality for JSON-like values: primitives by value (`NaN` equals `NaN`, `+0` equals `-0`), arrays by index with
  * holes compared as holes, every other object by its own enumerable string keys. Prototypes, symbol keys and the internal
  * state of `Date`, `Map`, `Set` or `RegExp` are not compared. Iterative (no recursion limit) and cycle-safe: a pair of
- * objects already under comparison is assumed equal, as in `util.isDeepStrictEqual`; pairs are recorded only below the
- * first levels, so shallow documents pay nothing for it.
+ * objects already under comparison is assumed equal, as in `util.isDeepStrictEqual`, and a pair reached again through a
+ * shared reference is not compared twice.
  */
 export const equal = (a: unknown, b: unknown): boolean => {
   if (sameValue(a, b)) { return true }
   if (!isContainer(a) || !isContainer(b)) { return false }
 
-  // pairs of containers to compare with their depth: x, y, depth
-  const stack: unknown[] = [a, b, 0]
-  // containers of `a` already paired with a container of `b`; a second distinct partner goes into `morePairs`
-  const pairs = new Map<object, object>()
-  let morePairs: Map<object, Set<object>> | undefined
+  // pairs of containers to compare (x at even, y at odd positions)
+  const stack: unknown[] = [a, b]
+  // pairs already under comparison; only pairs with container children are recorded: a cycle or a shared reference
+  // always leads back through such a pair, while a container of primitives cannot lead anywhere and is simply compared
+  // again when it is reached twice (bounded by its size), which saves the bookkeeping for most containers
+  const visited: Visited = { pairs: new Map(), more: undefined }
 
   while (stack.length) {
-    const depth = stack.pop() as number
     const y = stack.pop() as Record<string | number, unknown>
     const x = stack.pop() as Record<string | number, unknown>
 
-    if (depth >= UNTRACKED_DEPTH) {
-      const seen = pairs.get(x)
-      if (seen === undefined) {
-        pairs.set(x, y)
-      } else if (seen === y) {
-        continue
-      } else {
-        let partners = morePairs?.get(x)
-        if (!partners) { (morePairs ??= new Map()).set(x, (partners = new Set())) }
-        if (partners.has(y)) { continue }
-        partners.add(y)
-      }
-    }
+    if (wasVisited(visited, x, y)) { continue }
+    let recorded = false
 
     const xIsArray = Array.isArray(x)
     if (xIsArray !== Array.isArray(y)) { return false }
@@ -60,7 +62,8 @@ export const equal = (a: unknown, b: unknown): boolean => {
           continue
         }
         if (!isContainer(vx) || !isContainer(vy)) { return false }
-        stack.push(vx, vy, depth + 1)
+        if (!recorded) { recordPair(visited, x, y); recorded = true }
+        stack.push(vx, vy)
       }
     } else {
       const keys = Object.keys(x)
@@ -72,7 +75,8 @@ export const equal = (a: unknown, b: unknown): boolean => {
         const vy = y[key]
         if (sameValue(vx, vy)) { continue }
         if (!isContainer(vx) || !isContainer(vy)) { return false }
-        stack.push(vx, vy, depth + 1)
+        if (!recorded) { recordPair(visited, x, y); recorded = true }
+        stack.push(vx, vy)
       }
     }
   }

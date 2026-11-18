@@ -172,7 +172,7 @@ equal([], {})                                       // false
 equal(NaN, NaN)                                     // true
 ```
 
-`equal` compares JSON values: primitives by value (`NaN` equals `NaN`, `0` equals `-0`), arrays by index, objects by their own enumerable keys. Cyclic documents are compared by structure, with no option needed: the bookkeeping starts only below the first 32 levels, so ordinary documents don't pay for it. Prototypes are not compared, so class instances, `Date`, `Map` or `Set` are not meaningfully compared; use a general-purpose library for those.
+`equal` compares JSON values: primitives by value (`NaN` equals `NaN`, `0` equals `-0`), arrays by index, objects by their own enumerable keys. Cyclic documents and objects shared between several places are compared by structure, with no option needed, and each pair of objects is compared once, so documents with shared objects (for example dereferenced OpenAPI specs) stay linear. Prototypes are not compared, so class instances, `Date`, `Map` or `Set` are not meaningfully compared; use a general-purpose library for those.
 
 ## Rules
 

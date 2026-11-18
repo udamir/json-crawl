@@ -265,4 +265,23 @@ describe("G2 edge values", () => {
     expect(equal(ring(100, 99), ring(100, 99))).toBe(true)
     expect(equal(ring(100, 99), ring(100, -1))).toBe(false)
   })
+
+  // regression: recording pairs only below a depth threshold explored every path down to it, which is exponential when
+  // objects reach the same object more than once (dereferenced OpenAPI documents share schemas everywhere)
+  it("G2.18 objects that reference the same object several times are compared in linear time", () => {
+    const selfRefs = (fan: number): any => { const o: any = { x: 1 }; for (let i = 0; i < fan; i++) { o[`r${i}`] = o } return o }
+    // a lattice: every level references the next one twice, 40 levels deep (2^40 paths, 41 distinct objects)
+    const lattice = (levels: number, leaf: number): any => {
+      let node: any = { leaf }
+      for (let i = 0; i < levels; i++) { node = { left: node, right: node, list: [node, node] } }
+      return node
+    }
+    const start = performance.now()
+    for (const fan of [2, 3, 8]) {
+      expect(equal(selfRefs(fan), selfRefs(fan))).toBe(true)
+    }
+    expect(equal(lattice(40, 1), lattice(40, 1))).toBe(true)
+    expect(equal(lattice(40, 1), lattice(40, 2))).toBe(false)
+    expect(performance.now() - start).toBeLessThan(1000)
+  })
 })
