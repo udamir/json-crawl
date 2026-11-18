@@ -300,7 +300,6 @@ json-crawl is written for large documents such as multi-megabyte OpenAPI specs. 
 | walk every node, async | 31 | 229 | (none offer it) |
 | deep clone (`circular: false`) | 40 | (no tree mode) | klona/json 35, klona 40, rfdc 42, JSON round trip 54 |
 | clone and double every number (`circular: false`) | 73 | (no tree mode) | JSON.parse reviver 131, rfdc + traverse 222, traverse map 614 |
-| deep equality | (always cycle-safe) | 269 | fast-equals 33, fast-deep-equal 36, dequal 41 |
 | crawl with an OpenAPI rule tree | 94 | 267 | (json-crawl only) |
 
 - Version 1.0.0 is 3–8× faster than 0.5.3 in every comparable task, and `equal` on a 100 000-element array takes 0.5 ms instead of 22 s.

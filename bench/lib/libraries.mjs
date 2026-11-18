@@ -25,43 +25,42 @@ const { klona } = require("klona")
 const { klona: klonaJson } = require("klona/json")
 const lodashCloneDeep = require("lodash.clonedeep")
 const cloneLib = require("clone")
-const fastDeepEqual = require("fast-deep-equal")
-const { dequal } = require("dequal")
 const lodashIsEqual = require("lodash.isequal")
-const { deepEqual: fastEquals, circularDeepEqual: fastEqualsCircular } = require("fast-equals")
+const { circularDeepEqual: fastEqualsCircular } = require("fast-equals")
 const rfdcCircles = require("rfdc")({ circles: true })
 const deepEqualLib = require("deep-equal")
 
 const isObj = (v) => typeof v === "object" && v !== null
 
-// traversal: run(doc, visit) calls visit(value, key, path) once per visited node
+// traversal: run(doc, visit) calls visit(value, key) once per visited node; the path is not read, so every library
+// pays only for what it does unasked
 export const traversal = {
-  [CURRENT]: { cycles: false, run: (doc, visit) => current.syncCrawl(doc, ({ value, key, path }) => visit(value, key, path)) },
+  [CURRENT]: { cycles: false, run: (doc, visit) => current.syncCrawl(doc, ({ value, key }) => visit(value, key)) },
   [`${CURRENT} circular`]: {
     cycles: true,
-    run: (doc, visit) => current.syncCrawl(doc, ({ value, key, path }) => visit(value, key, path), { circular: true }),
+    run: (doc, visit) => current.syncCrawl(doc, ({ value, key }) => visit(value, key), { circular: true }),
     note: "circular: true (a node whose value is an ancestor is visited, its children are not)",
   },
-  [PREVIOUS]: { cycles: false, run: (doc, visit) => previous.syncCrawl(doc, ({ value, key, path }) => visit(value, key, path)) },
+  [PREVIOUS]: { cycles: false, run: (doc, visit) => previous.syncCrawl(doc, ({ value, key }) => visit(value, key)) },
   traverse: {
     cycles: true,
-    run: (doc, visit) => traverseLib(doc).forEach(function (x) { visit(x, this.key, this.path) }),
-    note: "path is an array of string keys; recursive; cycle detection always on",
+    run: (doc, visit) => traverseLib(doc).forEach(function (x) { visit(x, this.key) }),
+    note: "recursive; cycle detection always on",
   },
   "object-traversal": {
     cycles: false,
-    run: (doc, visit) => objectTraversal(doc, ({ value, key, meta }) => visit(value, key, meta.nodePath), { cycleHandling: false }),
-    note: "cycleHandling: false; path is a dotted string",
+    run: (doc, visit) => objectTraversal(doc, ({ value, key }) => visit(value, key), { cycleHandling: false }),
+    note: "cycleHandling: false",
   },
   "object-traversal cycles": {
     cycles: true,
-    run: (doc, visit) => objectTraversal(doc, ({ value, key, meta }) => visit(value, key, meta.nodePath), { cycleHandling: true }),
-    note: "cycleHandling: true; path is a dotted string",
+    run: (doc, visit) => objectTraversal(doc, ({ value, key }) => visit(value, key), { cycleHandling: true }),
+    note: "cycleHandling: true",
   },
   "deep-for-each": {
     cycles: false,
-    run: (doc, visit) => deepForEach(doc, (value, key, _subject, path) => visit(value, key, path)),
-    note: "the root is not visited; path is a string like a.b[0]",
+    run: (doc, visit) => deepForEach(doc, (value, key) => visit(value, key)),
+    note: "the root is not visited",
   },
   "tree-crawl": {
     cycles: false,
@@ -70,15 +69,15 @@ export const traversal = {
   },
   "json-schema-traverse": {
     cycles: false,
-    run: (doc, visit) => jsonSchemaTraverse(doc, { allKeys: true }, (schema, ptr) => visit(schema, undefined, ptr)),
+    run: (doc, visit) => jsonSchemaTraverse(doc, { allKeys: true }, (schema) => visit(schema)),
     note: "visits sub-schema objects only, never primitives",
   },
 }
 
 // asynchronous traversal: only json-crawl offers it
 export const asyncTraversal = {
-  [CURRENT]: { cycles: false, run: (doc, visit) => current.crawl(doc, ({ value, key, path }) => visit(value, key, path)) },
-  [PREVIOUS]: { cycles: false, run: (doc, visit) => previous.crawl(doc, ({ value, key, path }) => visit(value, key, path)) },
+  [CURRENT]: { cycles: false, run: (doc, visit) => current.crawl(doc, ({ value, key }) => visit(value, key)) },
+  [PREVIOUS]: { cycles: false, run: (doc, visit) => previous.crawl(doc, ({ value, key }) => visit(value, key)) },
 }
 
 // clone: run(doc) returns a deep copy
@@ -128,15 +127,11 @@ export const cloneTransform = {
   },
 }
 
-// equal: run(a, b) returns a boolean
+// equal: run(a, b) returns a boolean. json-crawl's equal always handles cycles, so only cycle-safe libraries are compared
 export const equal = {
   [CURRENT]: { cycles: true, run: (a, b) => current.equal(a, b) },
   "fast-equals circular": { cycles: true, run: fastEqualsCircular, note: "circularDeepEqual" },
   "lodash.isequal": { cycles: true, run: lodashIsEqual },
   "deep-equal": { cycles: true, run: (a, b) => deepEqualLib(a, b, { strict: true }), note: "strict mode" },
   "util.isDeepStrictEqual": { cycles: true, run: isDeepStrictEqual, note: "built-in" },
-  [PREVIOUS]: { cycles: false, run: (a, b) => previous.equal(a, b) },
-  "fast-deep-equal": { cycles: false, run: fastDeepEqual },
-  dequal: { cycles: false, run: dequal },
-  "fast-equals": { cycles: false, run: fastEquals, note: "deepEqual" },
 }

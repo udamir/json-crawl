@@ -1,6 +1,11 @@
 // Runs every benchmark case and writes results/results.json and README.md.
-// Each case is checked for correctness once before it is timed; a library that throws (e.g. a stack overflow on the
-// deep fixture) or returns a wrong result is reported with the error instead of a time.
+// Every cell (case x fixture x library) runs in its own fresh process (`node run.mjs --cell <index>`), which loads only
+// the fixture it needs: cells measured in one process influence each other (enum caches built by one library speed up
+// the next, allocation decisions made on a deep document slow down later crawls). Each cell is checked for correctness
+// once before it is timed; a library that throws (e.g. a stack overflow on the deep fixture) or returns a wrong result
+// is reported with the error instead of a time.
+import { execFileSync } from "node:child_process"
+import { fileURLToPath } from "node:url"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import * as lib from "./lib/libraries.mjs"
@@ -10,7 +15,9 @@ import { verifyCycleFlags } from "./lib/cycles.mjs"
 const { CURRENT, PREVIOUS, current } = lib
 const read = (url) => JSON.parse(readFileSync(new URL(url, import.meta.url), "utf8"))
 const summary = read("./fixtures/generated/summary.json")
-const fixtures = Object.fromEntries(Object.keys(summary).map((name) => [name, read(`./fixtures/generated/${name}.json`)]))
+// fixtures are parsed on first use, so that a cell's process holds only the document it measures
+const loaded = {}
+const fixtures = new Proxy(loaded, { get: (cache, name) => (cache[name] ??= read(`./fixtures/generated/${String(name)}.json`)) })
 
 const assert = (ok, message) => { if (!ok) { throw new Error(message) } }
 const isObj = (v) => typeof v === "object" && v !== null
@@ -34,7 +41,7 @@ const cases = []
 const add = (section, fixtureNames, libraries, make) => {
   for (const fixture of fixtureNames) {
     for (const [library, adapter] of Object.entries(libraries)) {
-      cases.push({ case: section, fixture, library, note: adapter.note, cycles: adapter.cycles, ...make(fixtures[fixture], adapter, library, fixture) })
+      cases.push({ case: section, fixture, library, note: adapter.note, cycles: adapter.cycles, make: () => make(fixtures[fixture], adapter, library, fixture) })
     }
   }
 }
@@ -100,7 +107,6 @@ const operationRules = {
   "/*": { kind: "operation-field" },
 }
 const openApiRules = { "/paths": { "/*": { "/*": operationRules } }, "/components": { "/schemas": { "/*": schemaRules } }, "/**": { any: true } }
-const ruleCounts = {}
 const ruleCrawl = (crawl, rules) => {
   let n = 0
   crawl(fixtures.openapi, ({ rules, state }) => { if (rules?.kind) { n++ } return { state: { ...state } } }, { state: {}, rules })
@@ -109,8 +115,13 @@ const ruleCrawl = (crawl, rules) => {
 for (const [library, l] of [[CURRENT, lib.current], [PREVIOUS, lib.previous]]) {
   cases.push({
     case: "rules", fixture: "openapi", library, cycles: false,
-    check: () => { ruleCounts[library] = ruleCrawl(l.syncCrawl, openApiRules); assert(ruleCounts[library] === ruleCounts[CURRENT], "rule matches differ") },
-    fn: () => ruleCrawl(l.syncCrawl, openApiRules),
+    make: () => ({
+      check: () => {
+        const n = ruleCrawl(l.syncCrawl, openApiRules)
+        assert(n > 0 && n === ruleCrawl(lib.current.syncCrawl, openApiRules), "rule matches differ")
+      },
+      fn: () => ruleCrawl(l.syncCrawl, openApiRules),
+    }),
   })
 }
 
@@ -123,18 +134,41 @@ const extCount = (crawl, rules) => {
   crawl(fixtures.openapi, ({ rules }) => { if (rules?.kind) { n++ } }, { rules })
   return n
 }
-const expectedExt = extCount(lib.current.syncCrawl, prefixRules)
 cases.push(
-  { case: "prefix rules", fixture: "openapi", library: CURRENT, cycles: false, note: "\"/x-*\" prefix rule", check: () => assert(expectedExt > 0, "no extension matched"), fn: () => extCount(lib.current.syncCrawl, prefixRules) },
-  { case: "prefix rules", fixture: "openapi", library: PREVIOUS, cycles: false, note: "no prefix rules: emulated with a /* function rule", check: () => assert(extCount(lib.previous.syncCrawl, emulatedRules) === expectedExt, "extension matches differ"), fn: () => extCount(lib.previous.syncCrawl, emulatedRules) },
+  { case: "prefix rules", fixture: "openapi", library: CURRENT, cycles: false, note: "\"/x-*\" prefix rule", make: () => ({ check: () => assert(extCount(lib.current.syncCrawl, prefixRules) > 0, "no extension matched"), fn: () => extCount(lib.current.syncCrawl, prefixRules) }) },
+  { case: "prefix rules", fixture: "openapi", library: PREVIOUS, cycles: false, note: "no prefix rules: emulated with a /* function rule", make: () => ({ check: () => assert(extCount(lib.previous.syncCrawl, emulatedRules) === extCount(lib.current.syncCrawl, prefixRules), "extension matches differ"), fn: () => extCount(lib.previous.syncCrawl, emulatedRules) }) },
 )
+
+// child mode: measure one cell and print its result row
+const cellFlag = process.argv.indexOf("--cell")
+if (cellFlag >= 0) {
+  const cell = cases[+process.argv[cellFlag + 1]]
+  const { make, ...meta } = cell
+  const [row] = await runCases([{ ...meta, ...make() }], () => {})
+  process.stdout.write(JSON.stringify(row) + "\n")
+  process.exit(0)
+}
 
 // every adapter's cycle-support flag decides its table, so it is checked against real behaviour first
 const cycleChecks = await verifyCycleFlags(lib, ["traversal", "asyncTraversal", "clone", "cloneTransform", "equal"])
 console.log(`cycle support verified for ${cycleChecks.length} adapters (${cycleChecks.filter((r) => r.handled).length} handle cycles)`)
-console.log(`${cases.length} cells`)
+console.log(`${cases.length} cells, one fresh process each`)
 const startedAt = new Date()
-const results = await runCases(cases)
+const self = fileURLToPath(import.meta.url)
+const results = []
+for (let i = 0; i < cases.length; i++) {
+  const { case: name, fixture, library } = cases[i]
+  let row
+  try {
+    const out = execFileSync(process.execPath, [...process.execArgv, self, "--cell", String(i)], { encoding: "utf8", maxBuffer: 1 << 26, env: process.env })
+    row = JSON.parse(out.trim().split("\n").pop())
+  } catch (e) {
+    // a crash of the whole process (e.g. out of memory) is a result too
+    row = { case: name, fixture, library, note: cases[i].note, cycles: cases[i].cycles, status: "error", error: `process failed: ${String(e.message).split("\n")[0]}` }
+  }
+  results.push(row)
+  console.log(`  ${name} | ${fixture} | ${library}: ${row.status === "ok" ? `median ${fmtMs(row.median)} ms, min ${fmtMs(row.min)} ms${row.truncated ? " (truncated)" : ""}` : `ERROR ${row.error}`}`)
+}
 mkdirSync(new URL("./results/", import.meta.url), { recursive: true })
 writeFileSync(new URL("./results/results.json", import.meta.url), JSON.stringify({ startedAt, results }, null, 2))
 
@@ -142,7 +176,7 @@ writeFileSync(new URL("./results/results.json", import.meta.url), JSON.stringify
 // report
 // ----------------------------------------------------------------------------------------------------------------
 const versionOf = (name) => read(`./node_modules/${name}/package.json`).version
-const peerPackages = ["traverse", "object-traversal", "deep-for-each", "tree-crawl", "json-schema-traverse", "rfdc", "klona", "lodash.clonedeep", "clone", "fast-deep-equal", "dequal", "fast-equals", "lodash.isequal", "deep-equal"]
+const peerPackages = ["traverse", "object-traversal", "deep-for-each", "tree-crawl", "json-schema-traverse", "rfdc", "klona", "lodash.clonedeep", "clone", "fast-equals", "lodash.isequal", "deep-equal"]
 const fmt = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : fmtMs(ms))
 const nodes = (n) => n.toLocaleString("en-US")
 
@@ -176,13 +210,13 @@ const table = (section, title, cycles) => {
 
 // one table per group: libraries that handle cyclic input track visited objects, the others do not, so they are never
 // compared in the same table
+// a group without a json-crawl 1.0.0 column says nothing about this library, so it is left out (equal always handles
+// cycles, so equality has no tree-only table)
 const tables = (section, title) => {
-  const groups = [...new Set(results.filter((r) => r.case === section).map((r) => r.cycles))]
-  if (groups.length < 2) { return table(section, title) }
-  return [
-    table(section, `${title}, libraries that handle cycles`, true),
-    table(section, `${title}, libraries without cycle support (tree input only)`, false),
-  ].join("\n\n")
+  const rows = results.filter((r) => r.case === section)
+  const groups = [true, false].filter((cycles) => rows.some((r) => r.cycles === cycles && r.library.startsWith(CURRENT)))
+  if (groups.length === 1 && rows.every((r) => r.cycles === groups[0])) { return table(section, title) }
+  return groups.map((cycles) => table(section, `${title}, ${cycles ? "libraries that handle cycles" : "libraries without cycle support (tree input only)"}`, cycles)).join("\n\n")
 }
 
 const cpu = os.cpus()[0]?.model ?? "unknown"
@@ -214,15 +248,15 @@ ${peerPackages.map((p) => `| ${p} | ${versionOf(p)} |`).join("\n")}
 
 ## Method
 
-Fixtures are generated deterministically by \`fixtures/generate.mjs\`: \`wide-10k\` is a flat object of 10 000 primitives, \`deep-5k\` a chain of 5 000 nested objects (\`{ level, name, child }\`), \`array-100k\` a flat array of 100 000 primitives, and \`openapi\` the Swagger petstore replicated into a ${(summary.openapi.bytes / 2 ** 20).toFixed(1)} MB OpenAPI document with \`$ref\`s and \`x-\` extensions. Every cell is checked once for correctness (node counts for json-crawl, copies compared with the source, \`true\` for equal documents and \`false\` for documents that differ in their last leaf), then warmed up for ${WARMUP} iterations and timed for ${RUNS} runs; tables show the median and the minimum. Cells marked † took more than 0.5 s per iteration and ran with a shortened warm-up. Traversal hooks are empty, so the times are the cost of the walk itself. Libraries whose semantics differ from json-crawl's are footnoted.
+Fixtures are generated deterministically by \`fixtures/generate.mjs\`: \`wide-10k\` is a flat object of 10 000 primitives, \`deep-5k\` a chain of 5 000 nested objects (\`{ level, name, child }\`), \`array-100k\` a flat array of 100 000 primitives, and \`openapi\` the Swagger petstore replicated into a ${(summary.openapi.bytes / 2 ** 20).toFixed(1)} MB OpenAPI document with \`$ref\`s and \`x-\` extensions. Every cell (one library on one fixture) runs in its own fresh Node process that loads only that fixture, because cells measured in one process influence each other: one library building V8's enum caches for the document speeds up the next one, and a deep document measured earlier can slow down later crawls by 20% or more. Every cell is checked once for correctness (node counts for json-crawl, copies compared with the source, \`true\` for equal documents and \`false\` for documents that differ in their last leaf), then warmed up for ${WARMUP} iterations and timed for ${RUNS} runs; tables show the median and the minimum. Cells marked † took more than 0.5 s per iteration and ran with a shortened warm-up. The traversal visitor reads only the value and the key, so the times are the cost of the walk itself. Reading the path is not benchmarked: libraries represent it differently (json-crawl and traverse hand out arrays of keys, object-traversal and deep-for-each strings), and a string path looks almost free in a benchmark only because V8 concatenates strings without copying and defers the copy to the first real use of the content, which a benchmark visitor does not reproduce. Libraries whose semantics differ from json-crawl's are footnoted.
 
-Libraries that handle cyclic input and libraries that do not are compared in separate tables: handling cycles means tracking every visited object, which is work the others skip, so a cycle-safe library is only compared with other cycle-safe ones. A library "handles cycles" when, on a small cyclic document, its traversal terminates, its clone reproduces the cycle in the copy, or its equality returns \`true\` for two equal cyclic documents and \`false\` for different ones; the harness checks this for every library in a worker with a time and memory limit before timing anything, and stops if a declared group does not match. json-crawl appears in both groups where it has both modes: \`syncCrawl\` without and with \`circular: true\`, \`syncClone\` with its default reference tracking and with \`circular: false\`. Its \`equal\` always handles cycles, so it is only in the cycle-safe table.
+Libraries that handle cyclic input and libraries that do not are compared in separate tables: handling cycles means tracking every visited object, which is work the others skip, so a cycle-safe library is only compared with other cycle-safe ones. A library "handles cycles" when, on a small cyclic document, its traversal terminates, its clone reproduces the cycle in the copy, or its equality returns \`true\` for two equal cyclic documents and \`false\` for different ones; the harness checks this for every library in a worker with a time and memory limit before timing anything, and stops if a declared group does not match. json-crawl appears in both groups where it has both modes: \`syncCrawl\` without and with \`circular: true\`, \`syncClone\` with its default reference tracking and with \`circular: false\`. Its \`equal\` always handles cycles, so equality has only the cycle-safe table; groups without a json-crawl 1.0.0 column are not reported.
 
 ## Results
 
 ### Traversal
 
-${tables("traversal", "sync traversal, empty visitor")}
+${tables("traversal", "sync traversal, the visitor reads value and key")}
 
 ${tables("async traversal", "async traversal (crawl), sync visitor")}
 
