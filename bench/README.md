@@ -16,7 +16,7 @@ pnpm run all        # builds the library (pnpm build in the repository root), ge
 | Node | v26.13.0 |
 | CPU | Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz, 16 logical cores, 16 GB RAM |
 | OS | Darwin 24.6.0 (darwin x64) |
-| Date | 2026-11-18T10:59:23.038Z |
+| Date | 2026-11-18T14:02:55.677Z |
 
 | library | version |
 |---|---|
@@ -49,10 +49,10 @@ Libraries that handle cyclic input and libraries that do not are compared in sep
 
 | fixture | json-crawl 1.0.0 circular [1] | traverse [2] | object-traversal cycles [3] |
 |---|---|---|---|
-| wide-10k (10,001 nodes) | 1.9 / 1.8 | 6.6 / 6.6 | 1.5 / 1.4 |
-| deep-5k (15,003 nodes) | 3.9 / 3.8 | — [4] | 1.2 / 1.1 |
-| array-100k (100,001 nodes) | 3.4 / 3.2 | 53.3 / 51.8 | 13.9 / 9.0 |
-| openapi (317,649 nodes) | 37.0 / 36.9 | 171.5 / 170.3 | 45.8 / 44.1 |
+| wide-10k (10,001 nodes) | 1.7 / 1.5 | 5.5 / 5.3 | 1.7 / 1.3 |
+| deep-5k (15,003 nodes) | 3.9 / 3.8 | — [4] | 1.3 / 1.0 |
+| array-100k (100,001 nodes) | 3.6 / 3.2 | 49.0 / 47.6 | 9.1 / 8.8 |
+| openapi (317,649 nodes) | 35.5 / 34.8 | 174.8 / 171.0 | 46.8 / 45.9 |
 
 [1] json-crawl 1.0.0 circular: circular: true (a node whose value is an ancestor is visited, its children are not)  
 [2] traverse: recursive; cycle detection always on  
@@ -63,10 +63,10 @@ Libraries that handle cyclic input and libraries that do not are compared in sep
 
 | fixture | json-crawl 1.0.0 | json-crawl 0.5.3 | object-traversal [1] | deep-for-each [2] | tree-crawl [3] | json-schema-traverse [4] |
 |---|---|---|---|---|---|---|
-| wide-10k (10,001 nodes) | 1.8 / 1.8 | 7.6 / 7.4 | 1.5 / 1.5 | 1.4 / 1.4 | 5.5 / 5.4 | 2.0 / 2.0 |
-| deep-5k (15,003 nodes) | 3.5 / 3.4 | 222.5 / 193.6 | 1.2 / 1.0 | 1.8 / 1.7 | 0.9 / 0.9 | — [5] |
-| array-100k (100,001 nodes) | 3.5 / 3.2 | 53.6 / 50.6 | 9.7 / 8.6 | 6.2 / 6.1 | 20.1 / 19.4 | 0.0 / 0.0 |
-| openapi (317,649 nodes) | 25.7 / 23.5 | 178.2 / 175.3 | 43.9 / 43.0 | 57.0 / 55.8 | 27.4 / 26.8 | 32.8 / 30.3 |
+| wide-10k (10,001 nodes) | 1.3 / 1.2 | 5.6 / 5.4 | 1.6 / 1.3 | 1.4 / 1.3 | 5.5 / 5.3 | 1.9 / 1.9 |
+| deep-5k (15,003 nodes) | 3.4 / 3.3 | 192.8 / 187.1 | 1.1 / 1.0 | 1.7 / 1.7 | 0.8 / 0.8 | — [5] |
+| array-100k (100,001 nodes) | 3.4 / 3.0 | 52.7 / 51.1 | 10.7 / 8.7 | 6.3 / 6.0 | 20.5 / 19.5 | 0.0 / 0.0 |
+| openapi (317,649 nodes) | 25.1 / 22.9 | 177.1 / 175.9 | 49.0 / 45.8 | 58.5 / 55.8 | 27.5 / 26.6 | 32.5 / 29.9 |
 
 [1] object-traversal: cycleHandling: false  
 [2] deep-for-each: the root is not visited  
@@ -78,8 +78,8 @@ Libraries that handle cyclic input and libraries that do not are compared in sep
 
 | fixture | json-crawl 1.0.0 | json-crawl 0.5.3 |
 |---|---|---|
-| wide-10k (10,001 nodes) | 1.4 / 1.3 | 8.3 / 7.7 |
-| openapi (317,649 nodes) | 32.3 / 31.8 | 236.0 / 230.2 |
+| wide-10k (10,001 nodes) | 1.5 / 1.2 | 7.9 / 7.5 |
+| openapi (317,649 nodes) | 33.7 / 32.7 | 239.5 / 236.0 |
 
 ### Clone
 
@@ -87,10 +87,10 @@ Libraries that handle cyclic input and libraries that do not are compared in sep
 
 | fixture | json-crawl 1.0.0 | json-crawl 0.5.3 | rfdc circles [1] | lodash.clonedeep | clone | structuredClone [2] |
 |---|---|---|---|---|---|---|
-| wide-10k (10,001 nodes) | 1.5 / 1.5 | 10.1 / 9.9 | 1.7 / 1.7 | 1.9 / 1.9 | 2.0 / 2.0 | 3.9 / 3.8 |
-| deep-5k (15,003 nodes) | 0.8 / 0.8 | 271.1 / 215.6 | 3.7 / 3.3 | — [3] | — [4] | — [5] |
-| array-100k (100,001 nodes) | 0.6 / 0.5 | 87.1 / 84.6 | 6.5 / 5.3 | 2.8 / 2.3 | 8.1 / 7.2 | 4.6 / 3.1 |
-| openapi (317,649 nodes) | 74.9 / 70.7 | 367.5 / 360.8 | 50.4 / 44.2 | 114.5 / 109.5 | 2.26 s / 2.15 s † | 132.1 / 128.4 |
+| wide-10k (10,001 nodes) | 1.7 / 1.4 | 9.6 / 9.4 | 1.8 / 1.6 | 1.9 / 1.8 | 1.9 / 1.9 | 3.7 / 3.5 |
+| deep-5k (15,003 nodes) | 0.8 / 0.8 | 197.1 / 194.0 | 2.0 / 2.0 | — [3] | — [4] | — [5] |
+| array-100k (100,001 nodes) | 0.3 / 0.3 | 85.5 / 83.9 | 6.2 / 5.2 | 2.9 / 2.4 | 7.3 / 6.8 | 3.7 / 3.2 |
+| openapi (317,649 nodes) | 70.0 / 68.4 | 353.5 / 346.6 | 48.7 / 43.5 | 108.1 / 105.3 | 2.23 s / 2.12 s † | 131.7 / 124.0 |
 
 [1] rfdc circles: rfdc({ circles: true })  
 [2] structuredClone: built-in  
@@ -102,10 +102,10 @@ Libraries that handle cyclic input and libraries that do not are compared in sep
 
 | fixture | json-crawl 1.0.0 tree [1] | rfdc [2] | klona | klona/json [3] | JSON.parse(JSON.stringify()) [4] |
 |---|---|---|---|---|---|
-| wide-10k (10,001 nodes) | 1.5 / 1.5 | 1.6 / 1.6 | 1.7 / 1.7 | 1.5 / 1.5 | 3.1 / 3.0 |
-| deep-5k (15,003 nodes) | 0.6 / 0.5 | 0.5 / 0.5 | 0.9 / 0.6 | 0.6 / 0.6 | 2.8 / 2.0 |
-| array-100k (100,001 nodes) | 0.7 / 0.4 | 7.1 / 5.6 | 1.2 / 0.9 | 0.4 / 0.4 | 5.0 / 4.5 |
-| openapi (317,649 nodes) | 38.7 / 37.4 | 45.6 / 41.4 | 41.2 / 40.9 | 39.1 / 34.3 | 57.9 / 54.9 |
+| wide-10k (10,001 nodes) | 1.5 / 1.4 | 1.7 / 1.6 | 1.6 / 1.6 | 1.5 / 1.5 | 3.1 / 2.9 |
+| deep-5k (15,003 nodes) | 0.6 / 0.5 | 0.3 / 0.3 | 0.5 / 0.5 | 0.4 / 0.4 | 1.4 / 1.4 |
+| array-100k (100,001 nodes) | 0.3 / 0.3 | 6.2 / 5.7 | 1.2 / 0.8 | 0.3 / 0.3 | 4.4 / 3.9 |
+| openapi (317,649 nodes) | 38.2 / 36.8 | 46.3 / 41.5 | 41.3 / 35.9 | 39.2 / 34.1 | 57.5 / 54.0 |
 
 [1] json-crawl 1.0.0 tree: circular: false (tree input: no cycle or shared-reference tracking)  
 [2] rfdc: default options  
@@ -116,8 +116,8 @@ Libraries that handle cyclic input and libraries that do not are compared in sep
 
 | fixture | json-crawl 1.0.0 | json-crawl 0.5.3 | rfdc circles + traverse update [1] |
 |---|---|---|---|
-| array-100k (100,001 nodes) | 4.8 / 4.4 | 99.8 / 97.4 | 63.3 / 62.0 |
-| openapi (317,649 nodes) | 103.2 / 94.9 | 399.8 / 391.7 | 230.7 / 224.4 |
+| array-100k (100,001 nodes) | 4.8 / 4.7 | 97.8 / 95.2 | 54.8 / 53.3 |
+| openapi (317,649 nodes) | 106.4 / 102.3 | 382.2 / 380.1 | 240.5 / 233.1 |
 
 [1] rfdc circles + traverse update: two passes: rfdc({ circles: true }) copy, then an in-place traverse update
 
@@ -125,8 +125,8 @@ Libraries that handle cyclic input and libraries that do not are compared in sep
 
 | fixture | json-crawl 1.0.0 tree [1] | rfdc + traverse update [2] | traverse map [3] | JSON.parse reviver [4] |
 |---|---|---|---|---|
-| array-100k (100,001 nodes) | 4.9 / 4.6 | 57.0 / 56.9 | 79.4 / 77.9 | 39.4 / 38.4 |
-| openapi (317,649 nodes) | 68.1 / 66.0 | 245.4 / 243.6 | 630.6 / 614.5 † | 140.0 / 132.9 |
+| array-100k (100,001 nodes) | 4.7 / 4.7 | 57.1 / 55.5 | 76.7 / 75.6 | 41.2 / 38.8 |
+| openapi (317,649 nodes) | 67.0 / 64.0 | 225.9 / 222.4 | 632.7 / 615.3 † | 132.4 / 129.0 |
 
 [1] json-crawl 1.0.0 tree: circular: false  
 [2] rfdc + traverse update: two passes: rfdc copy, then an in-place traverse update  
@@ -139,10 +139,10 @@ Libraries that handle cyclic input and libraries that do not are compared in sep
 
 | fixture | json-crawl 1.0.0 | fast-equals circular [1] | lodash.isequal | deep-equal [2] | util.isDeepStrictEqual [3] |
 |---|---|---|---|---|---|
-| wide-10k (10,001 nodes) | 2.1 / 2.0 | 2.0 / 1.9 | 2.2 / 2.2 | 2.6 / 2.6 | 2.1 / 2.1 |
-| deep-5k (15,003 nodes) | 0.9 / 0.8 | — [4] | — [5] | — [6] | — [7] |
-| array-100k (100,001 nodes) | 0.3 / 0.3 | 0.5 / 0.5 | 0.7 / 0.7 | 16.0 / 14.7 | 0.7 / 0.7 |
-| openapi (317,649 nodes) | 33.4 / 33.1 | 76.1 / 75.7 | 107.7 / 103.4 | 25.52 s / 25.31 s † | 60.6 / 59.4 |
+| wide-10k (10,001 nodes) | 2.0 / 2.0 | 2.0 / 2.0 | 2.3 / 2.3 | 2.7 / 2.7 | 2.2 / 2.2 |
+| deep-5k (15,003 nodes) | 1.0 / 1.0 | — [4] | — [5] | — [6] | — [7] |
+| array-100k (100,001 nodes) | 0.3 / 0.3 | 0.4 / 0.4 | 0.7 / 0.7 | 15.6 / 14.8 | 0.7 / 0.7 |
+| openapi (317,649 nodes) | 49.0 / 47.7 | 76.3 / 74.6 | 105.3 / 104.5 | 25.57 s / 25.45 s † | 59.6 / 59.0 |
 
 [1] fast-equals circular: circularDeepEqual  
 [2] deep-equal: strict mode  
@@ -158,13 +158,13 @@ Libraries that handle cyclic input and libraries that do not are compared in sep
 
 | fixture | json-crawl 1.0.0 | json-crawl 0.5.3 |
 |---|---|---|
-| openapi (317,649 nodes) | 83.7 / 82.1 | 242.9 / 240.4 |
+| openapi (317,649 nodes) | 84.1 / 82.8 | 247.0 / 246.2 |
 
 **x- extension rule at every depth**, median / min ms (lower is better)
 
 | fixture | json-crawl 1.0.0 [1] | json-crawl 0.5.3 [2] |
 |---|---|---|
-| openapi (317,649 nodes) | 38.5 / 37.9 | 198.7 / 193.5 |
+| openapi (317,649 nodes) | 38.0 / 37.5 | 210.0 / 202.5 |
 
 [1] json-crawl 1.0.0: "/x-*" prefix rule  
 [2] json-crawl 0.5.3: no prefix rules: emulated with a /* function rule

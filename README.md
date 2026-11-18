@@ -287,26 +287,26 @@ json-crawl is written for large documents such as multi-megabyte OpenAPI specs. 
 
 | task | json-crawl 1.0.0 | json-crawl 0.5.3 | alternatives |
 |---|---|---|---|
-| walk every node (`circular: true`) | 37 | (no cycle guard) | object-traversal 44, traverse 170 |
-| deep clone | 71 | 361 | rfdc with `circles` 44, lodash.clonedeep 110, structuredClone 128 |
-| clone and double every number | 95 | 392 | rfdc with `circles` + traverse 224 |
-| deep equality | 33 | (no cycle support) | util.isDeepStrictEqual 59, fast-equals `circularDeepEqual` 76, lodash.isequal 103 |
+| walk every node (`circular: true`) | 35 | (no cycle guard) | object-traversal 46, traverse 171 |
+| deep clone | 68 | 347 | rfdc with `circles` 44, lodash.clonedeep 105, structuredClone 124 |
+| clone and double every number | 102 | 380 | rfdc with `circles` + traverse 233 |
+| deep equality | 48 | (no cycle support) | util.isDeepStrictEqual 59, fast-equals `circularDeepEqual` 75, lodash.isequal 105 |
 
 **Tree input only (no cycle support)**
 
 | task | json-crawl 1.0.0 | json-crawl 0.5.3 | alternatives |
 |---|---|---|---|
-| walk every node | 24 | 175 | tree-crawl 27 (no keys or paths), json-schema-traverse 30 (sub-schemas only), object-traversal 43, deep-for-each 56 |
-| walk every node, async | 32 | 230 | (none offer it) |
-| deep clone (`circular: false`) | 37 | (no tree mode) | klona/json 34, klona 41, rfdc 41, JSON round trip 55 |
-| clone and double every number (`circular: false`) | 66 | (no tree mode) | JSON.parse reviver 133, rfdc + traverse 244, traverse map 615 |
-| crawl with an OpenAPI rule tree | 82 | 240 | (json-crawl only) |
-| crawl with an `x-*` prefix rule at every depth | 38 | 194 | (json-crawl only) |
+| walk every node | 23 | 176 | tree-crawl 27 (no keys or paths), json-schema-traverse 30 (sub-schemas only), object-traversal 46, deep-for-each 56 |
+| walk every node, async | 33 | 236 | (none offer it) |
+| deep clone (`circular: false`) | 37 | (no tree mode) | klona/json 34, klona 36, rfdc 41, JSON round trip 54 |
+| clone and double every number (`circular: false`) | 64 | (no tree mode) | JSON.parse reviver 129, rfdc + traverse 222, traverse map 615 |
+| crawl with an OpenAPI rule tree | 83 | 246 | (json-crawl only) |
+| crawl with an `x-*` prefix rule at every depth | 38 | 203 | (json-crawl only) |
 
 - Version 1.0.0 is 3–7× faster than 0.5.3 in every comparable task, and `equal` on a 100 000-element array takes 0.5 ms instead of 22 s.
 - Walking is the fastest of all libraries measured, with or without cycle handling, even though every json-crawl hook gets the key, the path, a state and the matched rules.
-- Among libraries that handle cycles, json-crawl is also the fastest at transforming while copying and at comparing (1.8× ahead of util.isDeepStrictEqual); rfdc with `circles` clones faster, but it tracks only the current branch, so a shared reference is copied twice.
-- On tree input, cloning is on par with klona and rfdc and slightly behind klona/json; transforming while copying is twice as fast as the next option.
+- Among libraries that handle cycles, json-crawl is also the fastest at transforming while copying and at comparing; rfdc with `circles` clones faster, but it tracks only the current branch, so a shared reference is copied twice.
+- On tree input, cloning is on par with klona and slightly behind klona/json; transforming while copying is twice as fast as the next option.
 - Every benchmark cell runs in its own process, so no library benefits from or suffers for the ones measured before it.
 - Nothing overflows the stack: on a chain of 5 000 nested objects, traverse, json-schema-traverse, lodash.clonedeep, clone, structuredClone, fast-equals `circularDeepEqual`, lodash.isequal and util.isDeepStrictEqual throw `RangeError` (deep-equal fails with a `TypeError`); json-crawl handles it in every mode.
 
