@@ -239,6 +239,55 @@ describe("D3 mergeRules", () => {
   it("D3.11 the first duplicate non-path key is reported and nothing is partially merged", () => {
     expect(() => mergeRules([rules({ "/a": { x: 1 }, tag: "t" }), rules({ tag: "u" }), rules({ tag: "v" })])).toThrow(/Duplicate key: tag/)
   })
+
+  // overlaps of rule objects only are merged once and resolved like a static rule; these pin that this is invisible
+  // the resolved fields of a node (path keys hold merge functions for merged sets, objects for a single set)
+  const fieldsOf = (r: unknown) => (r && typeof r === "object" ? Object.fromEntries(Object.entries(r).filter(([k]) => !k.startsWith("/"))) : r)
+  const resolvedAt = (ruleSet: Rules, doc: unknown) => {
+    const out: Array<[string, unknown]> = []
+    syncCrawl<{}, R>(doc, ({ path, rules: r }) => { out.push([path.join("."), fieldsOf(r)]) }, { rules: ruleSet })
+    return out
+  }
+
+  it("D3.12 merged rule objects resolve at every node like the single set with the same rules", () => {
+    const doc = { a: { b: [1, { c: 2 }], "x-a": 1 }, d: 3 }
+    const cases: Array<[Rules[], Rules]> = [
+      [[rules({ "/**": { g: 1 } }), rules({ "/**": { l: 2 } })], rules({ "/**": { g: 1, l: 2 } })],
+      [[rules({ "/*": { g: 1, "/*": { x: 1 } } }), rules({ "/*": { l: 2, "/*": { y: 2 } } })], rules({ "/*": { g: 1, l: 2, "/*": { x: 1, y: 2 } } })],
+      [[rules({ "/a": { x: 1 } }), rules({ "/a": { y: 2 } })], rules({ "/a": { x: 1, y: 2 } })],
+      [[rules({ "/a": { "/x-*": { x: 1 } } }), rules({ "/a": { "/x-*": { y: 2 } } })], rules({ "/a": { "/x-*": { x: 1, y: 2 } } })],
+    ]
+    for (const [sets, single] of cases) {
+      expect(resolvedAt(mergeRules(sets), doc)).toEqual(resolvedAt(single, doc))
+    }
+  })
+
+  it("D3.13 a merged /** overlap keeps the merge function in the `/**` slot and its results are shared between nodes", () => {
+    const merged = mergeRules([rules({ "/**": { g: 1 } }), rules({ "/**": { l: 2 } })])
+    const seen: Rules[] = []
+    syncCrawl<{}, R>({ a: 1, b: { c: 1 } }, ({ path, rules: r }) => { if (path.length && r) { seen.push(r) } }, { rules: merged })
+    expect(seen.length).toBe(3)
+    for (const r of seen) {
+      expect(typeof r["/**"]).toBe("function")
+      expect(r).toMatchObject({ g: 1, l: 2 })
+    }
+    expect(seen[0]).toBe(seen[1])
+    expect(seen[1]).toBe(seen[2])
+  })
+
+  it("D3.14 merged rule objects still conflict lazily, only at the nodes that reach the path, and every time", () => {
+    const merged = mergeRules([rules({ "/a": { x: 1 } }), rules({ "/a": { x: 2 } })])
+    expect(() => syncCrawl<{}, R>({ b: { a: 1 } }, () => {}, { rules: merged })).not.toThrow()
+    expect(() => syncCrawl<{}, R>({ a: 1 }, () => {}, { rules: merged })).toThrow(/Duplicate key: x/)
+    expect(() => syncCrawl<{}, R>({ a: 1 }, () => {}, { rules: merged })).toThrow(/Duplicate key: x/)
+  })
+
+  it("D3.15 an explicit undefined rule in one of the merged sets contributes nothing", () => {
+    const merged = mergeRules([rules({ "/a": undefined }), rules({ "/a": { x: 2 } })])
+    expect(getNodeRules(merged, "a", ["a"], 1)).toEqual({ x: 2 })
+    const none = mergeRules([rules({ "/a": undefined }), rules({ "/a": undefined })])
+    expect(getNodeRules(none, "a", ["a"], 1)).toBeUndefined()
+  })
 })
 
 describe("D5 prefix rules /<prefix>*", () => {
@@ -383,7 +432,7 @@ describe("D5 prefix rules /<prefix>*", () => {
     expect(getNodeRules(caret, "x-a", ["x-a"], 1)).toEqual({ tag: "ext" })
   })
 
-  it("D5.12 prefix rules are compiled once per rule set object; small sets without them are scanned, once per container in a crawl", () => {
+  it("D5.12 prefix rules are compiled once per rule set object; small sets without them are scanned, at most once per container in a crawl", () => {
     let ownKeysCalls = 0
     const counted = (target: object) => new Proxy(target, { ownKeys: (t) => { ownKeysCalls++; return Reflect.ownKeys(t) } })
     // a set with prefix rules is compiled once and cached
@@ -397,14 +446,21 @@ describe("D5 prefix rules /<prefix>*", () => {
     const big = rules(counted(large))
     for (let i = 0; i < 1000; i++) { getNodeRules(big, `k${i}`, [`k${i}`], i) }
     expect(ownKeysCalls).toBe(2)
-    // (characterization) a small set without prefix rules is not cached: getNodeRules scans it per call, a crawl once
-    // per container, whatever the number of children
+    // (characterization) a small set without prefix rules is not cached by object, but the last compiled set is
+    // remembered: repeated use of the same set scans it once, until another set is compiled in between
     const small = rules(counted({ "/a": { tag: "a" }, "/*": { tag: "any" } }))
     getNodeRules(small, "k1", ["k1"], 1)
     getNodeRules(small, "k2", ["k2"], 1)
+    expect(ownKeysCalls).toBe(3)
+    getNodeRules(r, "x-c", ["x-c"], 1)
+    getNodeRules(small, "k3", ["k3"], 1)
     expect(ownKeysCalls).toBe(4)
+    // a crawl compiles it once per container, whatever the number of children; it is still the last set here
     const doc: Record<string, number> = {}
     for (let i = 0; i < 100; i++) { doc[`k${i}`] = i }
+    syncCrawl<{}, R>(doc, () => {}, { rules: small })
+    expect(ownKeysCalls).toBe(4)
+    getNodeRules(r, "x-c", ["x-c"], 1)
     syncCrawl<{}, R>(doc, () => {}, { rules: small })
     expect(ownKeysCalls).toBe(5)
   })

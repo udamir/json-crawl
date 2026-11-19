@@ -1,4 +1,4 @@
-import { syncCrawl, crawl, type CrawlContext } from "../src"
+import { syncCrawl, crawl, syncClone, transform, type CrawlContext } from "../src"
 
 // Block A: traversal order & hook contract
 
@@ -230,3 +230,56 @@ describe("A2 cycle guard (circular: true)", () => {
   })
 })
 
+
+describe("A3 parent", () => {
+  it("A3.1 ctx.parent is the object or array the node was read from, and undefined for the root", () => {
+    const doc = { a: { b: 1 }, list: [1, { c: 2 }] }
+    const parents: Array<[string, unknown]> = []
+    syncCrawl(doc, (ctx) => { parents.push([pathOf(ctx), ctx.parent]) })
+    expect(parents).toEqual([
+      ["", undefined], ["a", doc], ["a.b", doc.a], ["list", doc], ["list.0", doc.list], ["list.1", doc.list], ["list.1.c", doc.list[1]],
+    ])
+    // the very objects, not copies
+    expect(parents[1][1]).toBe(doc)
+    expect(parents[2][1]).toBe(doc.a)
+    expect(parents[4][1]).toBe(doc.list)
+  })
+
+  it("A3.2 after a hook replaced a container, its children report the replacement as parent; every hook of a node sees the same parent", () => {
+    const replacement = { x: 1 }
+    const seen: Array<[string, unknown]> = []
+    syncCrawl({ a: { y: 1 } }, [
+      ({ key }) => (key === "a" ? { value: replacement, state: {} } : undefined),
+      (ctx) => { seen.push([pathOf(ctx), ctx.parent]) },
+    ], { state: {} })
+    expect(seen[1][1]).toEqual({ a: { y: 1 } })
+    expect(seen[2]).toEqual(["a.x", replacement])
+    expect(seen[2][1]).toBe(replacement)
+  })
+
+  it("A3.3 parent is right beyond the eager path depth and in the async crawl", async () => {
+    let doc: any = { leaf: 1 }
+    const containers: any[] = []
+    for (let i = 0; i < 300; i++) { doc = { a: doc } }
+    for (let node = doc; node && typeof node === "object"; node = node.a ?? undefined) { containers.push(node) }
+    const check = (ctx: CrawlContext<any>) => {
+      if (ctx.key === "leaf") { expect(ctx.parent).toBe(containers.at(-1)) }
+      if (ctx.key === "a") { expect((ctx.parent as any).a).toBe(ctx.value) }
+    }
+    syncCrawl(doc, check)
+    await crawl(doc, async (ctx) => { check(ctx) })
+  })
+
+  it("A3.4 in clone the parent is the source container, in transform the container being changed", async () => {
+    const source = { a: { b: 1 } }
+    const cloneParents: unknown[] = []
+    syncClone(source, (ctx) => { if (ctx.key === "b") { cloneParents.push(ctx.parent) } })
+    expect(cloneParents).toEqual([source.a])
+    expect(cloneParents[0]).toBe(source.a)
+    const target = { a: { b: 1 } }
+    const inner = target.a
+    const transformParents: unknown[] = []
+    await transform(target, (ctx) => { if (ctx.key === "b") { transformParents.push(ctx.parent) } })
+    expect(transformParents[0]).toBe(inner)
+  })
+})

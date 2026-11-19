@@ -12,7 +12,7 @@ import * as lib from "./lib/libraries.mjs"
 import { fmtMs, runCases, RUNS, WARMUP } from "./lib/harness.mjs"
 import { verifyCycleFlags } from "./lib/cycles.mjs"
 
-const { CURRENT, PREVIOUS, current } = lib
+const { CURRENT, RELEASE, PREVIOUS, current } = lib
 const read = (url) => JSON.parse(readFileSync(new URL(url, import.meta.url), "utf8"))
 const summary = read("./fixtures/generated/summary.json")
 // fixtures are parsed on first use, so that a cell's process holds only the document it measures
@@ -112,7 +112,7 @@ const ruleCrawl = (crawl, rules) => {
   crawl(fixtures.openapi, ({ rules, state }) => { if (rules?.kind) { n++ } return { state: { ...state } } }, { state: {}, rules })
   return n
 }
-for (const [library, l] of [[CURRENT, lib.current], [PREVIOUS, lib.previous]]) {
+for (const [library, l] of [[CURRENT, lib.current], [RELEASE, lib.release], [PREVIOUS, lib.previous]]) {
   cases.push({
     case: "rules", fixture: "openapi", library, cycles: false,
     make: () => ({
@@ -136,8 +136,72 @@ const extCount = (crawl, rules) => {
 }
 cases.push(
   { case: "prefix rules", fixture: "openapi", library: CURRENT, cycles: false, note: "\"/x-*\" prefix rule", make: () => ({ check: () => assert(extCount(lib.current.syncCrawl, prefixRules) > 0, "no extension matched"), fn: () => extCount(lib.current.syncCrawl, prefixRules) }) },
+  { case: "prefix rules", fixture: "openapi", library: RELEASE, cycles: false, note: "\"/x-*\" prefix rule", make: () => ({ check: () => assert(extCount(lib.release.syncCrawl, prefixRules) === extCount(lib.current.syncCrawl, prefixRules), "extension matches differ"), fn: () => extCount(lib.release.syncCrawl, prefixRules) }) },
   { case: "prefix rules", fixture: "openapi", library: PREVIOUS, cycles: false, note: "no prefix rules: emulated with a /* function rule", make: () => ({ check: () => assert(extCount(lib.previous.syncCrawl, emulatedRules) === extCount(lib.current.syncCrawl, prefixRules), "extension matches differ"), fn: () => extCount(lib.previous.syncCrawl, emulatedRules) }) },
 )
+
+// hook patterns (json-crawl only, this build and the last release): what hooks commonly return or need, on every node
+const exitOnly = () => ({ exitHook: noopExit })
+function noopExit() {}
+const stateOf = ({ value, state }) => (isObj(value) ? { state: { parent: value, depth: state.depth + 1 } } : undefined)
+const stateAndExitOf = ({ value, state }) => (isObj(value) ? { state: { parent: value, depth: state.depth + 1 }, exitHook: noopExit } : undefined)
+const mergedGlobalRules = [{ "/**": { a: 1 } }, { "/**": { b: 1 } }]
+const patterns = [
+  {
+    case: "exit hook on every node",
+    fixtures: ["deep-5k", "openapi"],
+    run: (l, doc) => { let n = 0; l.syncCrawl(doc, () => { n++; return exitOnly() }); return n },
+  },
+  {
+    case: "state per container",
+    fixtures: ["deep-5k", "openapi"],
+    run: (l, doc) => { let n = 0; l.syncCrawl(doc, (ctx) => { n++; return stateOf(ctx) }, { state: { parent: undefined, depth: 0 } }); return n },
+  },
+  {
+    case: "state and exit hook per container",
+    fixtures: ["deep-5k", "openapi"],
+    run: (l, doc) => { let n = 0; l.syncCrawl(doc, (ctx) => { n++; return stateAndExitOf(ctx) }, { state: { parent: undefined, depth: 0 } }); return n },
+  },
+  {
+    case: "parent of every node",
+    fixtures: ["deep-5k", "openapi"],
+    // 1.1 hands out ctx.parent; earlier releases need the parent passed down as state
+    run: (l, doc, library) => {
+      let n = 0
+      if (library === CURRENT) {
+        l.syncCrawl(doc, ({ parent }) => { if (parent !== undefined) { n++ } })
+      } else {
+        l.syncCrawl(doc, (ctx) => { if (ctx.state.parent !== undefined) { n++ } return isObj(ctx.value) ? { state: { parent: ctx.value } } : undefined }, { state: { parent: undefined } })
+      }
+      return n + 1
+    },
+    note: (library) => (library === CURRENT ? "ctx.parent" : "the parent passed down as state (no ctx.parent)"),
+  },
+  {
+    case: "two merged /** rule sets",
+    fixtures: ["openapi"],
+    run: (l, doc) => { let n = 0; l.syncCrawl(doc, ({ rules }) => { if (rules?.a && rules?.b) { n++ } }, { rules: mergedGlobalRules }); return n + 1 },
+  },
+  {
+    case: "transform, sync hook",
+    fixtures: ["openapi"],
+    // a no-op hook: the document is crawled and written back unchanged
+    run: async (l, doc) => { let n = 0; await l.transform(doc, () => { n++ }); return n },
+  },
+]
+for (const p of patterns) {
+  for (const fixture of p.fixtures) {
+    for (const [library, l] of [[CURRENT, lib.current], [RELEASE, lib.release]]) {
+      cases.push({
+        case: p.case, fixture, library, cycles: false, note: p.note?.(library),
+        make: () => ({
+          check: async () => assert(await p.run(l, fixtures[fixture], library) === summary[fixture].nodes, `${p.case}: not every node was counted`),
+          fn: () => p.run(l, fixtures[fixture], library),
+        }),
+      })
+    }
+  }
+}
 
 // child mode: measure one cell and print its result row
 const cellFlag = process.argv.indexOf("--cell")
@@ -210,7 +274,7 @@ const table = (section, title, cycles) => {
 
 // one table per group: libraries that handle cyclic input track visited objects, the others do not, so they are never
 // compared in the same table
-// a group without a json-crawl 1.0.0 column says nothing about this library, so it is left out (equal always handles
+// a group without a column for this build says nothing about this library, so it is left out (equal always handles
 // cycles, so equality has no tree-only table)
 const tables = (section, title) => {
   const rows = results.filter((r) => r.case === section)
@@ -222,7 +286,7 @@ const tables = (section, title) => {
 const cpu = os.cpus()[0]?.model ?? "unknown"
 const report = `# json-crawl benchmark
 
-${CURRENT} compared with the previous release (${PREVIOUS}) and with popular npm libraries that cover one of its features: traversal, deep clone, deep equality and transformation. Everything below is produced by the scripts in this directory.
+${CURRENT} compared with the last 0.x release (${PREVIOUS}) and with popular npm libraries that cover one of its features: traversal, deep clone, deep equality and transformation, and with the last release (${RELEASE}) on async traversal, rules and the hook patterns that changed since. Everything below is produced by the scripts in this directory.
 
 ## Run it
 
@@ -243,6 +307,7 @@ pnpm run all        # builds the library (pnpm build in the repository root), ge
 | library | version |
 |---|---|
 | ${CURRENT} | this repository, \`dist/index.cjs\` built by \`vp pack\` |
+| ${RELEASE} | npm release |
 | ${PREVIOUS} | npm release |
 ${peerPackages.map((p) => `| ${p} | ${versionOf(p)} |`).join("\n")}
 
@@ -250,7 +315,7 @@ ${peerPackages.map((p) => `| ${p} | ${versionOf(p)} |`).join("\n")}
 
 Fixtures are generated deterministically by \`fixtures/generate.mjs\`: \`wide-10k\` is a flat object of 10 000 primitives, \`deep-5k\` a chain of 5 000 nested objects (\`{ level, name, child }\`), \`array-100k\` a flat array of 100 000 primitives, and \`openapi\` the Swagger petstore replicated into a ${(summary.openapi.bytes / 2 ** 20).toFixed(1)} MB OpenAPI document with \`$ref\`s and \`x-\` extensions. Every cell (one library on one fixture) runs in its own fresh Node process that loads only that fixture, because cells measured in one process influence each other: one library building V8's enum caches for the document speeds up the next one, and a deep document measured earlier can slow down later crawls by 20% or more. Every cell is checked once for correctness (node counts for json-crawl, copies compared with the source, \`true\` for equal documents and \`false\` for documents that differ in their last leaf), then warmed up for ${WARMUP} iterations and timed for ${RUNS} runs; tables show the median and the minimum. Cells marked † took more than 0.5 s per iteration and ran with a shortened warm-up. The traversal visitor reads only the value and the key, so the times are the cost of the walk itself. Reading the path is not benchmarked: libraries represent it differently (json-crawl and traverse hand out arrays of keys, object-traversal and deep-for-each strings), and a string path looks almost free in a benchmark only because V8 concatenates strings without copying and defers the copy to the first real use of the content, which a benchmark visitor does not reproduce. Libraries whose semantics differ from json-crawl's are footnoted.
 
-Libraries that handle cyclic input and libraries that do not are compared in separate tables: handling cycles means tracking every visited object, which is work the others skip, so a cycle-safe library is only compared with other cycle-safe ones. A library "handles cycles" when, on a small cyclic document, its traversal terminates, its clone reproduces the cycle in the copy, or its equality returns \`true\` for two equal cyclic documents and \`false\` for different ones; the harness checks this for every library in a worker with a time and memory limit before timing anything, and stops if a declared group does not match. json-crawl appears in both groups where it has both modes: \`syncCrawl\` without and with \`circular: true\`, \`syncClone\` with its default reference tracking and with \`circular: false\`. Its \`equal\` always handles cycles, so equality has only the cycle-safe table; groups without a json-crawl 1.0.0 column are not reported.
+Libraries that handle cyclic input and libraries that do not are compared in separate tables: handling cycles means tracking every visited object, which is work the others skip, so a cycle-safe library is only compared with other cycle-safe ones. A library "handles cycles" when, on a small cyclic document, its traversal terminates, its clone reproduces the cycle in the copy, or its equality returns \`true\` for two equal cyclic documents and \`false\` for different ones; the harness checks this for every library in a worker with a time and memory limit before timing anything, and stops if a declared group does not match. json-crawl appears in both groups where it has both modes: \`syncCrawl\` without and with \`circular: true\`, \`syncClone\` with its default reference tracking and with \`circular: false\`. Its \`equal\` always handles cycles, so equality has only the cycle-safe table; groups without a ${CURRENT} column are not reported.
 
 ## Results
 
@@ -275,6 +340,22 @@ ${tables("equal", "deep equality of two equal documents")}
 ${tables("rules", "OpenAPI rule tree with function rules, state copied per node")}
 
 ${tables("prefix rules", "x- extension rule at every depth")}
+
+### Hook patterns (json-crawl only)
+
+What hooks commonly return or need, compared with the last release. Every hook counts the nodes it sees, and every cell is checked to have seen all of them.
+
+${tables("exit hook on every node", "the hook returns an exit hook for every node")}
+
+${tables("state per container", "the hook returns a new state for every container")}
+
+${tables("state and exit hook per container", "the hook returns a new state and an exit hook for every container")}
+
+${tables("parent of every node", "the hook needs the parent of every node")}
+
+${tables("two merged /** rule sets", "rules: [{ \"/**\": { a: 1 } }, { \"/**\": { b: 1 } }], the hook reads the merged rules")}
+
+${tables("transform, sync hook", "transform with a synchronous no-op hook")}
 `
 writeFileSync(new URL("./README.md", import.meta.url), report)
 console.log("wrote README.md")

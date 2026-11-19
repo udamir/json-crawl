@@ -29,6 +29,9 @@ importers:
       json-crawl-0.5.3:
         specifier: npm:json-crawl@0.5.3
         version: json-crawl@0.5.3
+      json-crawl-1.0.0:
+        specifier: npm:json-crawl@1.0.0
+        version: json-crawl@1.0.0
       json-schema-traverse:
         specifier: ^1.0.0
         version: 1.0.0
@@ -327,6 +330,10 @@ packages:
   json-crawl@0.5.3:
     resolution: {integrity: sha512-BEjjCw8c7SxzNK4orhlWD5cXQh8vCk2LqDr4WgQq4CV+5dvopeYwt1Tskg67SuSLKvoFH5g0yuYtg7rcfKV6YA==}
     engines: {node: '>=14.0.0'}
+
+  json-crawl@1.0.0:
+    resolution: {integrity: sha512-zjRSxbyu1RMIylI5dgp2Av1/O43EaKdkM4ko+e/zt+o5cr9u32+cN291ctJe1cB7wJGbf26iEbRyZnJJQnhL2g==}
+    engines: {node: '>=18.0.0'}
 
   json-schema-traverse@1.0.0:
     resolution: {integrity: sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==}
@@ -893,6 +900,8 @@ snapshots:
   isarray@2.0.5: {}
 
   json-crawl@0.5.3: {}
+
+  json-crawl@1.0.0: {}
 
   json-schema-traverse@1.0.0: {}
 

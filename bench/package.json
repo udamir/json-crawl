@@ -17,6 +17,7 @@
     "fast-deep-equal": "^3.1.3",
     "fast-equals": "^6.2.2",
     "json-crawl-0.5.3": "npm:json-crawl@0.5.3",
+    "json-crawl-1.0.0": "npm:json-crawl@1.0.0",
     "json-schema-traverse": "^1.0.0",
     "klona": "^2.0.6",
     "lodash.clonedeep": "^4.5.0",

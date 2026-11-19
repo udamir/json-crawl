@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.0
+
+### Highlights
+
+- **`ctx.parent`.** Every hook receives the object or array the current node was read from (`undefined` for the root), so code that needs the parent no longer has to pass it down as state: on a 5.5 MB OpenAPI document that is 27% faster than the state-based way 1.0.0 required.
+- **Hooks that return something are cheaper.** On the same document compared with 1.0.0: a hook that returns an exit hook for every node 31% faster, a new state and an exit hook for every container 26%, a new state for every container 15%, `transform` with a synchronous hook 7%, async `crawl` with synchronous hooks 5%, a crawl with an OpenAPI rule tree 6%.
+- **Merged rule sets resolve as fast as one set.** `rules: [a, b]` (or `mergeRules`) where both sets have rule objects under the same path key, such as two `/**` rules, is 4.3× faster than in 1.0.0 and as fast as a single set with the same rules.
+
+### New
+
+- `parent` in the hook context: the object or array the node's value was read from, the replacement when an earlier hook replaced the parent's value, and `undefined` for the root. In `syncClone` and `clone` it is the source container, in `transform` the container being changed.
+
+### Performance
+
+- A crawl whose hook returns nothing is up to 3% slower than in 1.0.0: every context carries the new `parent` field.
+- The rules that nodes receive from merged rule objects may now be the same object for several nodes, as rules under a `/**` rule already were; as before, treat rule objects returned to hooks as read-only.
+
 ## 1.0.0
 
 ### Highlights

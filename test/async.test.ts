@@ -158,3 +158,67 @@ describe("H4 sync API with async hooks", () => {
     expect(order).toContain("hook:a")
   })
 })
+
+// The async crawl runs synchronously until a hook returns a thenable, then resumes the same node after the await.
+describe("H5 resuming after an awaited hook", () => {
+  it("H5.1 with synchronous hooks every node is visited before crawl() returns", async () => {
+    const order: string[] = []
+    const p = crawl({ a: { b: 1 } }, ({ key }) => { order.push(String(key)) })
+    order.push("returned")
+    await p
+    expect(order).toEqual(["undefined", "a", "b", "returned"])
+  })
+
+  it("H5.2 an await in the middle of the hook list: later hooks see its response, exit hooks of both sides run LIFO", async () => {
+    const events: string[] = []
+    await crawl<{ n: number }>({ a: { b: 1 }, c: 2 }, [
+      ({ key }) => ({ exitHook: () => { events.push(`exit1:${String(key)}`) } }),
+      async ({ key, state }) => { await tick(); return key === "a" ? { state: { n: state.n + 1 }, exitHook: () => { events.push("exit2:a") } } : undefined },
+      ({ key, state }) => { events.push(`h3:${String(key)}:${state.n}`) },
+    ], { state: { n: 0 } })
+    expect(events).toEqual([
+      "h3:undefined:0", "h3:a:1", "h3:b:1", "exit1:b", "exit2:a", "exit1:a", "h3:c:0", "exit1:c", "exit1:undefined",
+    ])
+  })
+
+  it("H5.3 several awaits on one node, then synchronous nodes, keep the order and the values", async () => {
+    const seen: unknown[] = []
+    await crawl({ a: 1, b: 2 }, [
+      async ({ key, value }) => (key === "a" ? { value: (value as number) + 10 } : undefined),
+      async ({ key, value }) => { await tick(); return key === "a" ? { value: (value as number) * 2 } : undefined },
+      ({ key, value }) => { seen.push([key, value]) },
+    ])
+    expect(seen).toEqual([[undefined, { a: 1, b: 2 }], ["a", 22], ["b", 2]])
+  })
+
+  it("H5.4 done, terminate and a replacing value returned after an await are honoured", async () => {
+    const visited: string[] = []
+    await crawl({ skip: { x: 1 }, swap: { y: 1 }, stop: 1, after: 1 }, [
+      async ({ key }) => {
+        await tick()
+        if (key === "skip") { return { done: true } }
+        if (key === "swap") { return { value: { z: 1 } } }
+        if (key === "stop") { return { terminate: true } }
+      },
+      ({ path }) => { visited.push(path.join(".")) },
+    ])
+    expect(visited).toEqual(["", "swap", "swap.z"])
+  })
+
+  it("H5.5 transform and clone resume correctly after awaited replacements", async () => {
+    const source = { a: [1, 2, 3], b: { c: 4 } }
+    const doubled = async ({ value }: { value: unknown }) => { await tick(); return typeof value === "number" ? { value: value * 2 } : undefined }
+    expect(await clone(source, doubled)).toEqual({ a: [2, 4, 6], b: { c: 8 } })
+    expect(source).toEqual({ a: [1, 2, 3], b: { c: 4 } })
+    expect(await transform(structuredClone(source), doubled)).toEqual({ a: [2, 4, 6], b: { c: 8 } })
+  })
+
+  it("H5.6 an await beyond the eager path depth resumes with the right path, and the crawl rejects after a late failure", async () => {
+    let doc: any = { leaf: 1 }
+    for (let i = 0; i < 300; i++) { doc = { a: doc } }
+    const paths: number[] = []
+    await crawl(doc, async ({ path, key }) => { if (key === "leaf") { await tick(); paths.push(path.length) } })
+    expect(paths).toEqual([301])
+    await expect(crawl(doc, async ({ key }) => { if (key === "leaf") { await tick(); throw new Error("late") } })).rejects.toThrow("late")
+  })
+})

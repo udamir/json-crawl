@@ -32,7 +32,7 @@ syncCrawl(doc, ({ value, path }) => {
 // strings: ["name", "tags.0", "tags.1", "owner.name"]
 ```
 
-Nodes are visited depth-first, parents before children, object keys in insertion order. The root is visited too, with `key: undefined` and `path: []`.
+Nodes are visited depth-first, parents before children, object keys in insertion order. The root is visited too, with `key: undefined`, `path: []` and `parent: undefined`.
 
 ## API at a glance
 
@@ -52,10 +52,10 @@ Nodes are visited depth-first, parents before children, object keys in insertion
 
 ## Hooks
 
-A hook receives the context of the current node and may return a response:
+A hook receives the context of the current node (`value`, `key`, `path`, `state`, `rules`, and `parent`, the object or array the node was read from) and may return a response:
 
 ```ts
-syncCrawl(doc, ({ value, key, path, state, rules }) => {
+syncCrawl(doc, ({ value, key, path, state, rules, parent }) => {
   return {
     value,       // replace the node's value for the rest of the crawl (and in clone/transform output)
     state,       // state for this node's children (siblings keep the parent's state)
@@ -285,28 +285,40 @@ json-crawl is written for large documents such as multi-megabyte OpenAPI specs. 
 
 **Libraries that handle cycles**
 
-| task | json-crawl 1.0.0 | json-crawl 0.5.3 | alternatives |
+| task | json-crawl 1.1.0 | json-crawl 0.5.3 | alternatives |
 |---|---|---|---|
-| walk every node (`circular: true`) | 35 | (no cycle guard) | object-traversal 46, traverse 171 |
-| deep clone | 68 | 347 | rfdc with `circles` 44, lodash.clonedeep 105, structuredClone 124 |
-| clone and double every number | 102 | 380 | rfdc with `circles` + traverse 233 |
-| deep equality | 48 | (no cycle support) | util.isDeepStrictEqual 59, fast-equals `circularDeepEqual` 75, lodash.isequal 105 |
+| walk every node (`circular: true`) | 36 | (no cycle guard) | object-traversal 45, traverse 167 |
+| deep clone | 68 | 339 | rfdc with `circles` 44, lodash.clonedeep 108, structuredClone 127 |
+| clone and double every number | 96 | 377 | rfdc with `circles` + traverse 230 |
+| deep equality | 48 | (no cycle support) | util.isDeepStrictEqual 59, fast-equals `circularDeepEqual` 82, lodash.isequal 102 |
 
 **Tree input only (no cycle support)**
 
-| task | json-crawl 1.0.0 | json-crawl 0.5.3 | alternatives |
+| task | json-crawl 1.1.0 | json-crawl 0.5.3 | alternatives |
 |---|---|---|---|
-| walk every node | 23 | 176 | tree-crawl 27 (no keys or paths), json-schema-traverse 30 (sub-schemas only), object-traversal 46, deep-for-each 56 |
-| walk every node, async | 33 | 236 | (none offer it) |
-| deep clone (`circular: false`) | 37 | (no tree mode) | klona/json 34, klona 36, rfdc 41, JSON round trip 54 |
-| clone and double every number (`circular: false`) | 64 | (no tree mode) | JSON.parse reviver 129, rfdc + traverse 222, traverse map 615 |
-| crawl with an OpenAPI rule tree | 83 | 246 | (json-crawl only) |
-| crawl with an `x-*` prefix rule at every depth | 38 | 203 | (json-crawl only) |
+| walk every node | 24 | 172 | tree-crawl 26 (no keys or paths), json-schema-traverse 29 (sub-schemas only), object-traversal 41, deep-for-each 55 |
+| walk every node, async | 29 | 230 | (none offer it) |
+| deep clone (`circular: false`) | 32 | (no tree mode) | klona/json 35, klona 41, rfdc 41, JSON round trip 56 |
+| clone and double every number (`circular: false`) | 64 | (no tree mode) | JSON.parse reviver 130, rfdc + traverse 222, traverse map 622 |
+| crawl with an OpenAPI rule tree | 76 | 249 | (json-crawl only) |
+| crawl with an `x-*` prefix rule at every depth | 37 | 194 | (json-crawl only) |
 
-- Version 1.0.0 is 3–7× faster than 0.5.3 in every comparable task, and `equal` on a 100 000-element array takes 0.5 ms instead of 22 s.
-- Walking is the fastest of all libraries measured, with or without cycle handling, even though every json-crawl hook gets the key, the path, a state and the matched rules.
+**Hooks that return something, compared with 1.0.0**
+
+| task | json-crawl 1.1.0 | json-crawl 1.0.0 |
+|---|---|---|
+| the hook returns an exit hook for every node | 23 | 34 |
+| the hook returns a new state for every container | 25 | 29 |
+| the hook returns a new state and an exit hook for every container | 26 | 35 |
+| the hook needs the parent of every node | 22 (`ctx.parent`) | 30 (parent passed down as state) |
+| rules from two merged sets that both have a `/**` rule | 35 | 153 |
+| `transform` with a synchronous hook | 39 | 42 |
+
+- Version 1.x is 3–8× faster than 0.5.3 in every comparable task, and `equal` on a 100 000-element array takes 0.5 ms instead of 22 s.
+- 1.1.0 makes hooks that return exit hooks or states 15–31% cheaper than 1.0.0, `ctx.parent` replaces passing the parent down as state (27% faster), and merged rule sets resolve as fast as a single set (4.3× faster than 1.0.0).
+- Walking is the fastest of all libraries measured, with or without cycle handling, even though every json-crawl hook gets the key, the path, the parent, a state and the matched rules.
 - Among libraries that handle cycles, json-crawl is also the fastest at transforming while copying and at comparing; rfdc with `circles` clones faster, but it tracks only the current branch, so a shared reference is copied twice.
-- On tree input, cloning is on par with klona and slightly behind klona/json; transforming while copying is twice as fast as the next option.
+- On tree input, cloning is on par with klona/json and klona; transforming while copying is twice as fast as the next option.
 - Every benchmark cell runs in its own process, so no library benefits from or suffers for the ones measured before it.
 - Nothing overflows the stack: on a chain of 5 000 nested objects, traverse, json-schema-traverse, lodash.clonedeep, clone, structuredClone, fast-equals `circularDeepEqual`, lodash.isequal and util.isDeepStrictEqual throw `RangeError` (deep-equal fails with a `TypeError`); json-crawl handles it in every mode.
 

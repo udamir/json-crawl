@@ -1,5 +1,5 @@
 import type { CrawlChildType, CrawlRules, CrawlRulesContext, CrawlRulesFunc, JsonPath } from "./types.ts"
-import { compileRules, matchCompiled, resolveNodeRules } from "./internal.ts"
+import { STATIC_MERGE, type StaticMergeRule, compileRules, matchCompiled, resolveNodeRules } from "./internal.ts"
 
 /**
  * Returns the rule of the longest prefix rule (`"/<prefix>*"`) of `rules` that `key` starts with (unresolved: a rule
@@ -26,9 +26,23 @@ export const getNodeRules = <R extends {} = {}>(
   value: unknown
 ): CrawlRules<R> | undefined => resolveNodeRules(rules, key, path, undefined, value, undefined)
 
-// Rule of a path key present in several rule sets: resolved lazily with the real rules context, `undefined` results
-// are dropped and the rest is merged recursively.
-const mergeChildRules = <R extends {}>(values: CrawlChildType<R>[]): CrawlRulesFunc<R> => (ctx: CrawlRulesContext) => {
+// Rule of a path key present in several rule sets, merged lazily (so that conflicts surface only for the nodes that
+// reach the path). When all the values are rule objects the merge is the same for every node: it is built on first use
+// and marked as a static merge, which the resolver treats like the merged object itself. Otherwise the values are
+// resolved per node with the real rules context, `undefined` results are dropped and the rest is merged recursively.
+const mergeChildRules = <R extends {}>(values: CrawlChildType<R>[]): CrawlRulesFunc<R> => {
+  if (values.every((v) => typeof v !== "function")) {
+    // an explicit `undefined` rule contributes nothing, as in the per-node merge
+    const objects = values.filter((v) => v !== undefined) as CrawlRules<R>[]
+    let merged: CrawlRules<R> | undefined
+    const rule = (() => (merged ??= objects.length ? mergeRules(objects) : undefined)) as unknown as StaticMergeRule
+    rule[STATIC_MERGE] = true
+    return rule as unknown as CrawlRulesFunc<R>
+  }
+  return mergeResolvedRules(values)
+}
+
+const mergeResolvedRules = <R extends {}>(values: CrawlChildType<R>[]): CrawlRulesFunc<R> => (ctx: CrawlRulesContext) => {
   const resolved: CrawlRules<R>[] = []
   for (const v of values) {
     const r = typeof v === "function" ? v(ctx) : v

@@ -27,6 +27,7 @@ export interface CrawlContext<T extends {}, R extends {} = {}> {
   readonly key: string | number | undefined   // current node key (undefined for the root)
   state: T                                    // crawl state
   rules?: CrawlRules<R>                       // current node rules
+  readonly parent?: unknown                   // object or array the node was read from (undefined for the root)
 }
 
 export type ExitHook = () => void

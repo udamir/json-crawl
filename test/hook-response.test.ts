@@ -162,6 +162,24 @@ describe("B4 exitHook", () => {
     expect(() => syncCrawl({ a: 1 }, () => ({ exitHook: undefined }))).not.toThrow()
     expect(() => syncCrawl({ a: 1 }, () => ({ exitHook: null as any }))).not.toThrow()
   })
+
+  it("B4.7 one, two or three exit hooks per node each run exactly once, LIFO, for containers and leaves alike", () => {
+    // one exit hook is kept without an array, a second and third one are collected: every count must behave the same
+    const doc = { one: { x: 1 }, two: { x: 1 }, three: { x: 1 }, none: { x: 1 } }
+    const count: Record<string, number> = { one: 1, two: 2, three: 3, none: 0 }
+    const events: string[] = []
+    const hook = (n: number) => ({ path }: { path: (string | number)[] }) => {
+      const owner = String(path[0] ?? "root")
+      return (count[owner] ?? 1) >= n ? { exitHook: () => { events.push(`${path.join(".") || "root"}#${n}`) } } : undefined
+    }
+    syncCrawl(doc, [hook(1), hook(2), hook(3)])
+    expect(events).toEqual([
+      "one.x#1", "one#1",
+      "two.x#2", "two.x#1", "two#2", "two#1",
+      "three.x#3", "three.x#2", "three.x#1", "three#3", "three#2", "three#1",
+      "root#1",
+    ])
+  })
 })
 
 describe("B5 terminate", () => {
@@ -238,5 +256,31 @@ describe("B7 void responses", () => {
     const visited: string[] = []
     syncCrawl({ a: { b: 1 } }, [() => ({}), ({ path }) => { visited.push(path.join(".")) }])
     expect(visited).toEqual(["", "a", "a.b"])
+  })
+
+  it("B7.3 a context handed to a hook never changes afterwards, also not by that hook's own response", () => {
+    // the response of the last hook is applied without rebuilding the context; what the hook received stays as it was,
+    // at shallow depth and beyond the eager path depth (deep contexts), and with one or two hooks
+    let doc: any = { leaf: 1 }
+    for (let i = 0; i < 200; i++) { doc = { a: doc } }
+    for (const hookCount of [1, 2]) {
+      const seen: Array<{ ctx: any, value: unknown, state: unknown, rules: unknown, keys: string[], depth: number }> = []
+      const hook = (ctx: any) => {
+        seen.push({ ctx, value: ctx.value, state: ctx.state, rules: ctx.rules, keys: Object.keys(ctx), depth: ctx.path.length })
+        return { state: { depth: ctx.state.depth + 1 }, rules: { "/*": { tag: true } } }
+      }
+      syncCrawl<{ depth: number }>(doc, hookCount === 1 ? [hook] : [() => undefined, hook], { state: { depth: 0 } })
+      expect(seen.length).toBe(202)
+      for (const { ctx, value, state, rules, keys, depth } of seen) {
+        // the response was applied to the children...
+        expect((state as { depth: number }).depth).toBe(depth)
+        if (depth) { expect(rules).toEqual({ tag: true }) }
+        // ...and the context the hook received is unchanged
+        expect(ctx.value).toBe(value)
+        expect(ctx.state).toBe(state)
+        expect(ctx.rules).toBe(rules)
+        expect(Object.keys(ctx)).toEqual(keys)
+      }
+    }
   })
 })
