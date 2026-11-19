@@ -10,12 +10,12 @@ import { isDeepStrictEqual } from "node:util"
 const require = createRequire(import.meta.url)
 
 export const current = require("../../dist/index.cjs")
-// the last release, for the json-crawl-only cases (hook patterns, rules), and the last 0.x release for every table
-export const release = require("json-crawl-1.0.0")
+// the last release, for async traversal and the json-crawl-only cases (rules, hook patterns), and the last 0.x release for every table
+export const release = require("json-crawl-1.1.0")
 export const previous = require("json-crawl-0.5.3")
 export const CURRENT = `json-crawl ${require("../../package.json").version}`
 const version = (url) => JSON.parse(readFileSync(new URL(url, import.meta.url), "utf8")).version
-export const RELEASE = `json-crawl ${version("../node_modules/json-crawl-1.0.0/package.json")}`
+export const RELEASE = `json-crawl ${version("../node_modules/json-crawl-1.1.0/package.json")}`
 export const PREVIOUS = `json-crawl ${version("../node_modules/json-crawl-0.5.3/package.json")}`
 
 const traverseLib = require("traverse")

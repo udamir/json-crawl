@@ -11,6 +11,14 @@ export interface CrawlParams<T extends {}, R extends {} = {}> {
    * never finishes unless a hook stops the descent.
    */
   circular?: boolean
+  /**
+   * `true`: build each node's `path` only when a hook reads it (default `false`). Faster when hooks read the path at few nodes or none
+   * (about 10% on a large OpenAPI document, 5× on very deep documents), slower when every node reads it. Read
+   * `ctx.path` where it is needed: destructuring `({ path })` reads it at every node. In lazy mode `path` is not an own
+   * property of the context (spreading a context leaves it out). The gain needs a process whose crawls use lazy paths:
+   * crawling with the default paths in the same process costs most of it.
+   */
+  lazyPath?: boolean
 }
 
 export interface CloneParams<T extends {}, R extends {} = {}> extends CrawlParams<T, R> {

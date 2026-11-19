@@ -9,6 +9,7 @@ const engineParams = <T extends {}, R extends {}>(params: CrawlParams<T, R>): En
   state: params.state!,
   rules: isArray(params.rules) ? mergeRules(params.rules) : params.rules,
   circular: params.circular,
+  lazy: params.lazyPath === true,
 })
 
 // async, so that an error while preparing the crawl (e.g. a rule merge conflict) rejects the promise instead of throwing

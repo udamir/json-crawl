@@ -93,6 +93,7 @@ const cloneParams = <T extends {}, R extends {}>(params: CloneParams<T, R>): [{ 
     rules: isArray(params.rules) ? mergeRules(params.rules) : params.rules,
     // the clone tracks references itself; the engine's cycle guard is not used
     circular: undefined,
+    lazy: params.lazyPath === true,
   }
   return [root, _params]
 }

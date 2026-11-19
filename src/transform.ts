@@ -63,9 +63,10 @@ export const transform = async <T extends {}, R extends {} = {}>(
 ): Promise<unknown> => {
   const root: { [JSON_ROOT_KEY]: unknown } = { [JSON_ROOT_KEY]: data }
   const _params: EngineParams<TransformState<T>, R> = {
-    state: { ...(params.state ?? ({} as T)), root, node: root },
+    state: { ...(params.state as T), root, node: root },
     rules: isArray(params.rules) ? mergeRules(params.rules) : params.rules,
     circular: params.circular,
+    lazy: params.lazyPath === true,
   }
 
   await runCrawl<TransformState<T>, R>(data, normalizeHooks(hooks), _params, transformStep<T, R>)

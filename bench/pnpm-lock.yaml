@@ -29,9 +29,9 @@ importers:
       json-crawl-0.5.3:
         specifier: npm:json-crawl@0.5.3
         version: json-crawl@0.5.3
-      json-crawl-1.0.0:
-        specifier: npm:json-crawl@1.0.0
-        version: json-crawl@1.0.0
+      json-crawl-1.1.0:
+        specifier: npm:json-crawl@1.1.0
+        version: json-crawl@1.1.0
       json-schema-traverse:
         specifier: ^1.0.0
         version: 1.0.0
@@ -331,8 +331,8 @@ packages:
     resolution: {integrity: sha512-BEjjCw8c7SxzNK4orhlWD5cXQh8vCk2LqDr4WgQq4CV+5dvopeYwt1Tskg67SuSLKvoFH5g0yuYtg7rcfKV6YA==}
     engines: {node: '>=14.0.0'}
 
-  json-crawl@1.0.0:
-    resolution: {integrity: sha512-zjRSxbyu1RMIylI5dgp2Av1/O43EaKdkM4ko+e/zt+o5cr9u32+cN291ctJe1cB7wJGbf26iEbRyZnJJQnhL2g==}
+  json-crawl@1.1.0:
+    resolution: {integrity: sha512-l/7OVyqFPClBG8ijdlsYnVKY8Gy8V9gWt5GDNKnBwGjb/wLYYmnelj3tv6jy7gLjJxcdspL8RQKGCU43l+fA7A==}
     engines: {node: '>=18.0.0'}
 
   json-schema-traverse@1.0.0:
@@ -901,7 +901,7 @@ snapshots:
 
   json-crawl@0.5.3: {}
 
-  json-crawl@1.0.0: {}
+  json-crawl@1.1.0: {}
 
   json-schema-traverse@1.0.0: {}
 

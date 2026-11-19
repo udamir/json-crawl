@@ -48,7 +48,7 @@ Nodes are visited depth-first, parents before children, object keys in insertion
 | `mergeRules([rulesA, rulesB])` | combines rule sets |
 | `REMOVE` | value that removes a node in `transform` |
 
-`hooks` is a function or an array of functions. `params` is `{ state?, rules?, circular? }`; see [Cycles](#cycles) for `circular`.
+`hooks` is a function or an array of functions. `params` is `{ state?, rules?, circular?, lazyPath? }`; see [Cycles](#cycles) for `circular` and [Lazy paths](#lazy-paths) for `lazyPath`.
 
 ## Hooks
 
@@ -247,6 +247,28 @@ const merged = mergeRules([openApiRules, { "/paths": { "/*": { "/*": { "/depreca
 
 `getNodeRules(rules, key, path, value)` returns the rule set of a child exactly as the crawler resolves it, for code that walks documents on its own.
 
+## Lazy paths
+
+Every context carries `path`, a fresh array built for every node. Hooks that read the path at few nodes or none can skip that work with `lazyPath: true`: `ctx.path` is then built on its first read, so nodes whose hooks never read it cost nothing for their path.
+
+```ts
+import { syncCrawl } from "json-crawl"
+
+const refs: string[] = []
+syncCrawl(doc, (ctx) => {
+  if (typeof ctx.value === "object" && ctx.value !== null && "$ref" in ctx.value) {
+    refs.push(ctx.path.join("/"))   // the path is built only for these nodes
+  }
+}, { lazyPath: true })
+```
+
+- Read `ctx.path` where you need it. Destructuring it (`({ value, path }) => …`) reads it, and so builds it, at every node, which gives the time back.
+- Every read on one context returns the same array (also from an exit hook); like the default path, never change it.
+- `path` is not an own property of a lazy context: spreading a context (`{ ...ctx }`) or listing its keys leaves it out. Assigning `ctx.path` makes it a plain property of that context.
+- `syncCrawl`, `crawl`, `syncClone`, `clone` and `transform` accept the option; hooks and rule functions read `path` as usual.
+- On a 5.5 MB OpenAPI document a crawl that reads no path is about 10% faster with lazy paths, and about as fast as the default when 3% of the nodes read their path; a chain of 5 000 nested objects is walked 5× faster. When hooks read the path at every node, the default is faster (about 25%).
+- The gain needs a process whose crawls use lazy paths: V8 optimizes the crawl loop for the contexts it has seen, and crawling with the default paths in the same process costs the lazy crawls most of their advantage.
+
 ## Cycles
 
 JSON parsed from text never has cycles, but objects built in code can. Each function handles them as follows:
@@ -275,7 +297,7 @@ With `circular: true` the crawl only cuts real cycles. An object shared by two b
 ## Good to know
 
 - Only own enumerable string keys are visited (no symbols, no inherited or non-enumerable properties). Array holes are skipped; `clone` keeps them and `equal` tells a hole from an explicit `undefined`.
-- `path` is a fresh array for every node and is never changed afterwards, so it is safe to keep. For nodes deeper than 128 levels it is built only when a hook reads it, which keeps very deep documents fast.
+- `path` is a fresh array for every node and is never changed afterwards, so it is safe to keep. For nodes deeper than 128 levels it is built only when a hook reads it, which keeps very deep documents fast. With [lazy paths](#lazy-paths) no path is built unless a hook asks for it.
 - Clone and transform hooks get two extra state fields, `state.root` and `state.node` (the output being built). If such a hook returns its own state, keep them: `{ state: { ...state, mine: 1 } }`.
 - Rule objects returned to hooks may be shared between nodes; treat them as read-only. Don't change a rule set after it has been used either: json-crawl caches what it learns about each rule set object.
 
@@ -285,40 +307,37 @@ json-crawl is written for large documents such as multi-megabyte OpenAPI specs. 
 
 **Libraries that handle cycles**
 
-| task | json-crawl 1.1.0 | json-crawl 0.5.3 | alternatives |
+| task | json-crawl 1.2.0 | json-crawl 0.5.3 | alternatives |
 |---|---|---|---|
-| walk every node (`circular: true`) | 36 | (no cycle guard) | object-traversal 45, traverse 167 |
-| deep clone | 68 | 339 | rfdc with `circles` 44, lodash.clonedeep 108, structuredClone 127 |
-| clone and double every number | 96 | 377 | rfdc with `circles` + traverse 230 |
-| deep equality | 48 | (no cycle support) | util.isDeepStrictEqual 59, fast-equals `circularDeepEqual` 82, lodash.isequal 102 |
+| walk every node (`circular: true`) | 36 | (no cycle guard) | object-traversal 46, traverse 173 |
+| deep clone | 68 | 345 | rfdc with `circles` 43, lodash.clonedeep 107, structuredClone 130 |
+| clone and double every number | 97 | 381 | rfdc with `circles` + traverse 225 |
+| deep equality | 47 | (no cycle support) | util.isDeepStrictEqual 58, fast-equals `circularDeepEqual` 74, lodash.isequal 103 |
 
 **Tree input only (no cycle support)**
 
-| task | json-crawl 1.1.0 | json-crawl 0.5.3 | alternatives |
+| task | json-crawl 1.2.0 | json-crawl 0.5.3 | alternatives |
 |---|---|---|---|
-| walk every node | 24 | 172 | tree-crawl 26 (no keys or paths), json-schema-traverse 29 (sub-schemas only), object-traversal 41, deep-for-each 55 |
-| walk every node, async | 29 | 230 | (none offer it) |
-| deep clone (`circular: false`) | 32 | (no tree mode) | klona/json 35, klona 41, rfdc 41, JSON round trip 56 |
-| clone and double every number (`circular: false`) | 64 | (no tree mode) | JSON.parse reviver 130, rfdc + traverse 222, traverse map 622 |
-| crawl with an OpenAPI rule tree | 76 | 249 | (json-crawl only) |
-| crawl with an `x-*` prefix rule at every depth | 37 | 194 | (json-crawl only) |
+| walk every node | 23 | 171 | tree-crawl 26 (no keys or paths), json-schema-traverse 29 (sub-schemas only), object-traversal 43, deep-for-each 61 |
+| walk every node, async | 29 | 228 | (none offer it) |
+| deep clone (`circular: false`) | 38 | (no tree mode) | klona/json 34, klona 37, rfdc 42, JSON round trip 56 |
+| clone and double every number (`circular: false`) | 63 | (no tree mode) | JSON.parse reviver 134, rfdc + traverse 222, traverse map 632 |
+| crawl with an OpenAPI rule tree | 80 | 243 | (json-crawl only) |
+| crawl with an `x-*` prefix rule at every depth | 35 | 197 | (json-crawl only) |
 
-**Hooks that return something, compared with 1.0.0**
+**Lazy paths (`lazyPath: true`), json-crawl 1.2.0**
 
-| task | json-crawl 1.1.0 | json-crawl 1.0.0 |
+| task | default paths | lazy paths |
 |---|---|---|
-| the hook returns an exit hook for every node | 23 | 34 |
-| the hook returns a new state for every container | 25 | 29 |
-| the hook returns a new state and an exit hook for every container | 26 | 35 |
-| the hook needs the parent of every node | 22 (`ctx.parent`) | 30 (parent passed down as state) |
-| rules from two merged sets that both have a `/**` rule | 35 | 153 |
-| `transform` with a synchronous hook | 39 | 42 |
+| walk, no path read | 22 | 20 |
+| walk, the path of `$ref` nodes read (3% of the nodes) | 25 | 24 |
+| walk, the path of every node read | 23 | 29 |
+| walk a chain of 5 000 nested objects, no path read | 3.3 | 0.6 |
 
 - Version 1.x is 3–8× faster than 0.5.3 in every comparable task, and `equal` on a 100 000-element array takes 0.5 ms instead of 22 s.
-- 1.1.0 makes hooks that return exit hooks or states 15–31% cheaper than 1.0.0, `ctx.parent` replaces passing the parent down as state (27% faster), and merged rule sets resolve as fast as a single set (4.3× faster than 1.0.0).
 - Walking is the fastest of all libraries measured, with or without cycle handling, even though every json-crawl hook gets the key, the path, the parent, a state and the matched rules.
 - Among libraries that handle cycles, json-crawl is also the fastest at transforming while copying and at comparing; rfdc with `circles` clones faster, but it tracks only the current branch, so a shared reference is copied twice.
-- On tree input, cloning is on par with klona/json and klona; transforming while copying is twice as fast as the next option.
+- On tree input, cloning is close to klona/json and klona; transforming while copying is twice as fast as the next option.
 - Every benchmark cell runs in its own process, so no library benefits from or suffers for the ones measured before it.
 - Nothing overflows the stack: on a chain of 5 000 nested objects, traverse, json-schema-traverse, lodash.clonedeep, clone, structuredClone, fast-equals `circularDeepEqual`, lodash.isequal and util.isDeepStrictEqual throw `RangeError` (deep-equal fails with a `TypeError`); json-crawl handles it in every mode.
 

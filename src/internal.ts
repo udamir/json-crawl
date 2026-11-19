@@ -190,15 +190,25 @@ const slashKey = (key: string | number): CrawlRulesKey => {
 
 // Rules context of a deep crawled node without a cached path: the path is materialized only if a rule function reads
 // it.
-const lazyRulesContext = (key: string | number, node: PathNode, value: unknown): CrawlRulesContext => {
-  if (node.path) { return { key, path: node.path, value } }
-  return {
-    key,
-    get path() { return materializePath(node) },
-    set path(path: JsonPath) { Object.defineProperty(this, "path", { value: path, writable: true, enumerable: true, configurable: true }) },
-    value,
+// A class with the accessor on the prototype: an object literal with its own `get path()` creates closures per object
+// and falls back to dictionary mode, which made rule functions of lazily pathed nodes 20% slower.
+class LazyRulesContext implements CrawlRulesContext {
+  declare key: string | number
+  declare value: unknown
+  #node: PathNode
+
+  constructor(key: string | number, node: PathNode, value: unknown) {
+    this.key = key
+    this.value = value
+    this.#node = node
   }
+
+  get path(): JsonPath { return materializePath(this.#node) }
+  set path(path: JsonPath) { Object.defineProperty(this, "path", { value: path, writable: true, enumerable: true, configurable: true }) }
 }
+
+const lazyRulesContext = (key: string | number, node: PathNode, value: unknown): CrawlRulesContext =>
+  node.path ? { key, path: node.path, value } : new LazyRulesContext(key, node, value)
 
 const rulesContext = (key: string | number, path: JsonPath | undefined, pathNode: PathNode | undefined, value: unknown): CrawlRulesContext =>
   path ? { key, path, value } : lazyRulesContext(key, pathNode!, value)
@@ -347,12 +357,18 @@ export interface EngineParams<T extends {}, R extends {}> {
   state: T
   rules: CrawlRules<R> | undefined
   circular: boolean | undefined
+  lazy: boolean // `lazyPath: true`: `path` is built on its first read
 }
 
 // Internal final step of a node (the write of clone and transform), called after the user hooks with the node's
 // original value. It returns the state for the node's children, POST_DONE to skip the children, or undefined to keep
 // the current state; an exit hook for the node is handed over through `sink`. Returning the state itself (instead of a
 // `{ state }` response) saves a response object and a rebuilt context per container.
+const rootContext = <T extends {}, R extends {}>(data: unknown, root: PathNode, params: EngineParams<T, R>): CrawlContext<T, R> =>
+  params.lazy
+    ? new LazyContext(data, undefined, undefined, params.state, params.rules, undefined) as unknown as CrawlContext<T, R>
+    : createContext(data, root, undefined, params.state, params.rules, undefined)
+
 export const POST_DONE: object = { done: true }
 export interface PostSink { exitHook: ExitHook | undefined }
 
@@ -400,6 +416,8 @@ interface Cursor<T extends {}, R extends {}> {
   context: CrawlContext<T, R> | undefined
   node: PathNode | undefined
   path: JsonPath | undefined
+  lazy: boolean
+  eagerDepth: number // depth up to which children get an eager path: EAGER_PATH_DEPTH, or -1 with lazy paths
 }
 
 // The context of a node. A node with a cached path (always the case up to EAGER_PATH_DEPTH) gets a plain object.
@@ -465,6 +483,68 @@ const lazyContext = <T extends {}, R extends {}>(
 const childRules = <T extends {}, R extends {}>(frame: Frame<T, R>, key: string | number, path: JsonPath | undefined, node: PathNode | undefined, value: unknown): CrawlRules<R> | undefined =>
   resolveRules(frame.rules!, frame.globalRule, frame.localRule, key, path, node, value, frame.compiled)
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Lazy paths (`lazyPath: true`)
+// ---------------------------------------------------------------------------------------------------------------------
+
+// The context of a node in a crawl with `lazyPath: true`. Its `path` is an accessor on the prototype: the path is built on
+// the first read from the path node of the parent container and the key, and the same array is returned on later reads.
+// Leaves allocate nothing for their path (containers keep the path node they get when they are entered), and a path a
+// hook has already built is handed to the container's path node, so its children copy it instead of walking up to the
+// root. The accessor is defined once on the class, so all instances share one hidden class with fast properties (an own
+// accessor per object, as in DeepContext, would need a defineProperty per node). Unlike the default contexts, `path` is
+// not an own property: spreading a lazy context or listing its keys leaves it out. Assigning `path` makes it a plain own
+// property of that context.
+export class LazyContext<T extends {}, R extends {}> {
+  declare value: unknown
+  declare key: string | number | undefined
+  declare state: T
+  declare rules: CrawlRules<R> | undefined
+  declare parent: unknown
+  #parentNode: PathNode | undefined
+  #path: JsonPath | undefined = undefined
+
+  constructor(value: unknown, parentNode: PathNode | undefined, key: string | number | undefined, state: T, rules: CrawlRules<R> | undefined, parent: unknown) {
+    this.value = value
+    this.key = key
+    this.state = state
+    this.rules = rules
+    this.parent = parent
+    this.#parentNode = parentNode
+  }
+
+  get path(): JsonPath {
+    if (this.#path !== undefined) { return this.#path }
+    return this.#path = this.#parentNode === undefined ? [] : childPath(materializePath(this.#parentNode), this.key!)
+  }
+
+  set path(path: JsonPath) {
+    Object.defineProperty(this, "path", { value: path, writable: true, enumerable: true, configurable: true })
+  }
+
+  // the path if a hook has built it, for the container's path node (static, so that it is not visible on contexts)
+  static builtPath(context: object): JsonPath | undefined {
+    return context instanceof LazyContext ? context.#path : undefined
+  }
+
+  // the context with the fields of a hook response applied, for the next hook of the same node
+  static rebuild<T extends {}, R extends {}>(context: LazyContext<T, R>, value: unknown, state: T, rules: CrawlRules<R> | undefined): LazyContext<T, R> {
+    return new LazyContext(value, context.#parentNode, context.key, state, rules, context.parent)
+  }
+}
+
+// rules of a lazily pathed child: a path node for the rule functions' context, only when the parent has rules
+const lazyChildRules = <T extends {}, R extends {}>(frame: Frame<T, R>, key: string | number, value: unknown): CrawlRules<R> | undefined =>
+  childRules(frame, key, undefined, childPathNode(frame.node, key), value)
+
+// A separate function, so that nextChild, which is inlined into the crawl loop, stays small.
+const lazyChild = <T extends {}, R extends {}>(frame: Frame<T, R>, cursor: Cursor<T, R>, key: string | number, value: unknown): void => {
+  cursor.node = undefined
+  cursor.path = undefined
+  const rules = frame.rules === undefined ? undefined : lazyChildRules(frame, key, value)
+  cursor.context = new LazyContext(value, frame.node, key, frame.state, rules, frame.data) as unknown as CrawlContext<T, R>
+}
+
 // Builds the context the children of `frame` are crawled with and advances the frame; `false` when the frame is exhausted.
 const nextChild = <T extends {}, R extends {}>(frame: Frame<T, R>, cursor: Cursor<T, R>): boolean => {
   const { data } = frame
@@ -480,7 +560,9 @@ const nextChild = <T extends {}, R extends {}>(frame: Frame<T, R>, cursor: Curso
   }
   const value = data[key]
   const parent = frame.node
-  if (parent.depth < EAGER_PATH_DEPTH) {
+  // eagerDepth is EAGER_PATH_DEPTH, or -1 with lazy paths, which sends every child to deepChild: nextChild keeps its
+  // size (one more branch here took a helper out of the crawl loop's inlining budget: exit-hook crawls +15%)
+  if (parent.depth < cursor.eagerDepth) {
     const path = childPath(parent.path!, key)
     cursor.node = undefined
     cursor.path = path
@@ -498,6 +580,10 @@ const nextChild = <T extends {}, R extends {}>(frame: Frame<T, R>, cursor: Curso
 // inlining budget, and one more field in the contexts was enough to push nextChild out of it (-16% → -1% on a crawl
 // whose hook returns a state per container).
 const deepChild = <T extends {}, R extends {}>(frame: Frame<T, R>, cursor: Cursor<T, R>, key: string | number, value: unknown): void => {
+  if (cursor.lazy) {
+    lazyChild(frame, cursor, key, value)
+    return
+  }
   const node = childPathNode(frame.node, key)
   cursor.node = node
   cursor.path = undefined
@@ -511,6 +597,7 @@ const applyResponse = <T extends {}, R extends {}>(context: CrawlContext<T, R>, 
   const value = "value" in response ? response.value : context.value
   const state = "state" in response ? response.state! : context.state
   const rules = "rules" in response ? response.rules : context.rules
+  if (cursor.lazy) { return LazyContext.rebuild(context as unknown as LazyContext<T, R>, value, state, rules) as unknown as CrawlContext<T, R> }
   return cursor.path
     ? { value, path: cursor.path, key: context.key, state, rules, parent: context.parent }
     : createContext(value, cursor.node!, context.key, state, rules, context.parent)
@@ -603,7 +690,7 @@ export const runCrawl = <T extends {}, R extends {} = {}>(
     hooks,
     post,
     frames: [],
-    cursor: { context: createContext(data, root, undefined, params.state, params.rules, undefined), node: root, path: undefined },
+    cursor: { context: rootContext(data, root, params), node: root, path: undefined, lazy: params.lazy, eagerDepth: params.lazy ? -1 : EAGER_PATH_DEPTH },
     open: params.circular ? new Set<object>() : undefined,
     sink: { exitHook: undefined },
     context: undefined,
@@ -673,6 +760,7 @@ const driveCrawl = <T extends {}, R extends {}>(crawl: AsyncCrawl<T, R>): Pendin
     }
 
     if (descend && isObject(value) && !isOpenCycle(open, value)) {
+      if (cursor.lazy) { cursor.path = LazyContext.builtPath(context) }
       const frame = openFrame(frames, value, context.key, rules, cursor, exitHooks, childState)
       if (frames.length) { releasePath(frames[frames.length - 1].node) }
       frames.push(frame)
@@ -744,6 +832,7 @@ const finishNode = <T extends {}, R extends {}>(crawl: AsyncCrawl<T, R>, resolve
     }
   }
   if (descend && isObject(value) && !isOpenCycle(open, value)) {
+    if (cursor.lazy) { cursor.path = LazyContext.builtPath(context) }
     const frame = openFrame(frames, value, context.key, rules, cursor, exitHooks, childState)
     if (frames.length) { releasePath(frames[frames.length - 1].node) }
     frames.push(frame)
@@ -762,10 +851,9 @@ export const runSyncCrawl = <T extends {}, R extends {} = {}>(
   params: EngineParams<T, R>,
   post?: PostStep<T, R>
 ): void => {
-  const { rules } = params
   const frames: Frame<T, R>[] = []
   const root = rootPathNode()
-  const cursor: Cursor<T, R> = { context: createContext(data, root, undefined, params.state, rules, undefined), node: root, path: undefined }
+  const cursor: Cursor<T, R> = { context: rootContext(data, root, params), node: root, path: undefined, lazy: params.lazy, eagerDepth: params.lazy ? -1 : EAGER_PATH_DEPTH }
   const open = params.circular ? new Set<object>() : undefined
   const sink: PostSink = { exitHook: undefined }
 
@@ -819,6 +907,7 @@ export const runSyncCrawl = <T extends {}, R extends {} = {}>(
 
     if (descend && isObject(value) && !isOpenCycle(open, value)) {
       // only the innermost open container keeps its cached path (see the paths section of internal.ts)
+      if (cursor.lazy) { cursor.path = LazyContext.builtPath(context) }
       const frame = openFrame(frames, value, context.key, rules, cursor, exitHooks, childState)
       if (frames.length) { releasePath(frames[frames.length - 1].node) }
       frames.push(frame)

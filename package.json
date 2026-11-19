@@ -1,6 +1,6 @@
 {
   "name": "json-crawl",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Sync and async JSON crawler with hooks and path rules: crawl, clone, transform and compare JSON documents",
   "type": "module",
   "main": "./dist/index.cjs",

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.0
+
+### Highlights
+
+- **Lazy paths.** With `{ lazyPath: true }` each node's `ctx.path` is built only when a hook reads it. On a 5.5 MB OpenAPI document a crawl that reads no path is about 10% faster, and a chain of 5 000 nested objects is walked 5× faster; when 3% of the nodes read their path the speed is about the same as with the default paths, and when every node reads it the default is about 25% faster.
+
+### New
+
+- `lazyPath` option for `syncCrawl`, `crawl`, `syncClone`, `clone` and `transform`: `ctx.path` is built on its first read, and every read on one context returns the same array. Hooks and rule functions read it as usual; to benefit, read it where it is needed rather than destructuring `({ path })` at every node. In this mode `path` is not an own property of the context, so spreading a context leaves it out.
+
+### Performance
+
+- The gain of lazy paths needs a process whose crawls use them: V8 optimizes the crawl loop for the contexts it has seen, and crawling with the default paths in the same process costs the lazy crawls most of their advantage.
+- Crawls with the default paths are as fast as in 1.1.0.
+
 ## 1.1.0
 
 ### Highlights

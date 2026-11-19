@@ -125,7 +125,7 @@ for (const [library, l] of [[CURRENT, lib.current], [RELEASE, lib.release], [PRE
   })
 }
 
-// prefix rules: x- extensions at every depth. 1.0.0 uses a prefix rule, 0.5.3 has none and needs a /* function rule
+// prefix rules: x- extensions at every depth. 1.x uses a prefix rule, 0.5.3 has none and needs a /* function rule
 const ext = { kind: "extension" }
 const prefixRules = { "/**": { "/x-*": ext } }
 const emulatedRules = { "/**": { "/*": ({ key }) => (typeof key === "string" && key.startsWith("x-") ? ext : undefined) } }
@@ -165,17 +165,11 @@ const patterns = [
   {
     case: "parent of every node",
     fixtures: ["deep-5k", "openapi"],
-    // 1.1 hands out ctx.parent; earlier releases need the parent passed down as state
-    run: (l, doc, library) => {
+    run: (l, doc) => {
       let n = 0
-      if (library === CURRENT) {
-        l.syncCrawl(doc, ({ parent }) => { if (parent !== undefined) { n++ } })
-      } else {
-        l.syncCrawl(doc, (ctx) => { if (ctx.state.parent !== undefined) { n++ } return isObj(ctx.value) ? { state: { parent: ctx.value } } : undefined }, { state: { parent: undefined } })
-      }
+      l.syncCrawl(doc, ({ parent }) => { if (parent !== undefined) { n++ } })
       return n + 1
     },
-    note: (library) => (library === CURRENT ? "ctx.parent" : "the parent passed down as state (no ctx.parent)"),
   },
   {
     case: "two merged /** rule sets",
@@ -197,6 +191,50 @@ for (const p of patterns) {
         make: () => ({
           check: async () => assert(await p.run(l, fixtures[fixture], library) === summary[fixture].nodes, `${p.case}: not every node was counted`),
           fn: () => p.run(l, fixtures[fixture], library),
+        }),
+      })
+    }
+  }
+}
+
+// lazy paths (json-crawl only, this build): the same crawl with the default paths and with `lazyPath: true`
+const LAZY = `${CURRENT} lazy paths`
+const isRefNode = (v) => isObj(v) && typeof v.$ref === "string"
+// summed path lengths of the nodes `read` selects, by a plain iterative walk (the path length of a node is its depth)
+const expectedLength = (doc, read) => {
+  let total = 0
+  const stack = [[doc, 0]]
+  while (stack.length) {
+    const [value, depth] = stack.pop()
+    if (read({ value })) { total += depth }
+    if (isObj(value)) { for (const key of Object.keys(value)) { stack.push([value[key], depth + 1]) } }
+  }
+  return total
+}
+const lazyCases = [
+  { case: "lazy paths: no path read", fixtures: ["deep-5k", "openapi"], read: () => false },
+  { case: "lazy paths: path read at $ref nodes", fixtures: ["openapi"], read: (ctx) => isRefNode(ctx.value) },
+  { case: "lazy paths: path read at every node", fixtures: ["deep-5k", "openapi"], read: () => true },
+]
+for (const p of lazyCases) {
+  for (const fixture of p.fixtures) {
+    for (const [library, params] of [[CURRENT, {}], [LAZY, { lazyPath: true }]]) {
+      const run = (doc) => {
+        let n = 0
+        let length = 0
+        lib.current.syncCrawl(doc, (ctx) => { n++; if (p.read(ctx)) { length += ctx.path.length } }, params)
+        return [n, length]
+      }
+      cases.push({
+        case: p.case, fixture, library, cycles: false, note: library === LAZY ? "lazyPath: true" : undefined,
+        make: () => ({
+          // checked against an independent walk, not a crawl in the other mode: a process that crawls with both modes
+          // keeps type feedback from both, which costs the lazy crawl most of its gain
+          check: () => {
+            const [n, length] = run(fixtures[fixture])
+            assert(n === summary[fixture].nodes && length === expectedLength(fixtures[fixture], p.read), `${p.case}: wrong node count or paths`)
+          },
+          fn: () => run(fixtures[fixture]),
         }),
       })
     }
@@ -286,7 +324,7 @@ const tables = (section, title) => {
 const cpu = os.cpus()[0]?.model ?? "unknown"
 const report = `# json-crawl benchmark
 
-${CURRENT} compared with the last 0.x release (${PREVIOUS}) and with popular npm libraries that cover one of its features: traversal, deep clone, deep equality and transformation, and with the last release (${RELEASE}) on async traversal, rules and the hook patterns that changed since. Everything below is produced by the scripts in this directory.
+${CURRENT} compared with the last 0.x release (${PREVIOUS}) and with popular npm libraries that cover one of its features: traversal, deep clone, deep equality and transformation, and with the last release (${RELEASE}) on async traversal, rules and common hook patterns. Everything below is produced by the scripts in this directory.
 
 ## Run it
 
@@ -356,6 +394,16 @@ ${tables("parent of every node", "the hook needs the parent of every node")}
 ${tables("two merged /** rule sets", "rules: [{ \"/**\": { a: 1 } }, { \"/**\": { b: 1 } }], the hook reads the merged rules")}
 
 ${tables("transform, sync hook", "transform with a synchronous no-op hook")}
+
+### Lazy paths (json-crawl only)
+
+The same crawl with the default paths and with \`lazyPath: true\`, by how many nodes read their path. Every cell is checked to visit every node and to read the same paths.
+
+${tables("lazy paths: no path read", "the hook reads no path")}
+
+${tables("lazy paths: path read at $ref nodes", "the hook reads the path of $ref nodes only (3% of the nodes)")}
+
+${tables("lazy paths: path read at every node", "the hook reads the path of every node")}
 `
 writeFileSync(new URL("./README.md", import.meta.url), report)
 console.log("wrote README.md")
